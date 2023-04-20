@@ -102,13 +102,13 @@ class DQNAgent(Base):
         self.memory = ReplayMemory(self.config.memory_size)
         self.steps_done = 0
     
-    def load_model(self, modelpath):
-        self.policy_net = torch.load(modelpath)
-        self.policy_net.eval()
-    
     def save_model(self, modelpath):
         if modelpath: 
-            torch.save(self.policy_net, modelpath)
+            torch.save(self.policy_net.state_dict(), modelpath)
+
+    def load_model(self, modelpath):
+        self.policy_net.load_state_dict(torch.load(modelpath))
+        self.policy_net.eval()
 
     def learn(self):
         ep_returns = np.zeros(self.config.n_episodes)
