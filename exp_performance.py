@@ -33,7 +33,7 @@ def evaluate_seeds(args, results):
     
     args = []
     records = []
-    for seed in np.arange(0, 10): 
+    for seed in np.arange(0, 8): 
         recordname = 'data/exp_performance/p%ssr%dload%.2f/%s-%d.json' % (config['environment']['p_num'], sr, load, agent, seed)        
         if exists(recordname):
             print(f"{recordname} exists")
@@ -59,14 +59,14 @@ def evaluate_seeds(args, results):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(5) as pool: 
+        with Pool(8) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
                 recordname = 'data/exp_performance/p%ssr%dload%.2f/%s-%d.json' % (config['environment']['p_num'], sr, load, agent, seed)     
                 record.save(recordname)
                 records.append(record)
 
-    returns, served_reqs, pm_util, target_util, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
+    returns, served_reqs, pm_util, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
     total_suspended = []
     total_served = []
     for record in records:
@@ -74,7 +74,6 @@ def evaluate_seeds(args, results):
         served_reqs.append(record.served_requests)
         total_served.append(record.served_requests[-1])
         pm_util.append(record.pm_utilisation)
-        target_util.append(record.target_util_mean)
         drop_rates.append(record.drop_rate)
         suspended.append(record.suspended)
         total_suspended.append(record.suspended[-1])
@@ -84,12 +83,11 @@ def evaluate_seeds(args, results):
   
     returns = np.array(returns)
     pm_util = np.array(pm_util) # dim 0: multiple tests, dim 1: testing steps, dim 2: pms 
-    target_util = np.array(target_util)
     served_reqs = np.mean(served_reqs, axis=0)
     drop_rates = np.mean(drop_rates, axis=0)
     pm_mean_multitests = np.mean(pm_util, axis=2)
-    pm_sd_multitests = np.std(pm_util, axis=2)
-    pm_std = np.mean(pm_sd_multitests, axis=0)
+    pm_var_multitests = np.var(pm_util, axis=2)
+    pm_var = np.mean(pm_var_multitests, axis=0)
     
     results['agent'] += [agent] * TOTAL_STEPS
     results['load'] += [load] * TOTAL_STEPS
@@ -97,7 +95,7 @@ def evaluate_seeds(args, results):
     results['p_num'] += [p_num] * TOTAL_STEPS
     results['step'] += np.arange(1, TOTAL_STEPS + 1, 1, dtype=int).tolist()
     results['util'] += np.mean(pm_mean_multitests, axis=0).tolist()
-    results['sd'] += pm_std.tolist()
+    results['var'] += pm_var.tolist()
     results['served'] += served_reqs.tolist()
     results['suspended'] += np.mean(suspended, axis=0).tolist()
     results['waiting_ratio'] += np.mean(waiting_ratios, axis=0).tolist()
@@ -108,16 +106,15 @@ def evaluate_seeds(args, results):
     to_print += '%.2f,' % (load) 
     to_print += '%d,' % (sr) 
     to_print += '%d,' % (p_num) 
-    to_print += '%.4f,' % (np.mean(returns))
-    to_print += '%.4f,' % (np.mean(drop_rates))
+    to_print += '%.3f,' % (np.mean(returns))
+    to_print += '%.3f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
     to_print += '%d,' % (np.mean(total_suspended))
-    to_print += '%.4f,' % (np.mean(pm_mean_multitests))
-    to_print += '%.4f,' % (np.mean(np.mean(target_util, axis=1)))
-    to_print += '%.4f,' % (np.mean(pm_std))
-    to_print += '%.4f,' % (np.mean(pending_rates))
-    to_print += '%.4f,' % (np.mean(waiting_ratios))
-    to_print += '%.4f\n' % (np.mean(slowdown_rates))
+    to_print += '%.3f,' % (np.mean(pm_mean_multitests))
+    to_print += '%.3f,' % (np.mean(pm_var))
+    to_print += '%.3f,' % (np.mean(pending_rates))
+    to_print += '%.3f,' % (np.mean(waiting_ratios))
+    to_print += '%.3f\n' % (np.mean(slowdown_rates))
 
 
     return to_print
@@ -128,20 +125,17 @@ if __name__ == '__main__':
     
     seq, r, tsteps = 'uniform', 1, TOTAL_STEPS
 
-    results = {'step': [], 'load': [], 'service_rate': [], 'p_num': [], 'agent': [], 'util': [], 'sd': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
-    to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Std, Pending Rate, Waiting Ratio, Slowdown Rate\n'
+    results = {'step': [], 'load': [], 'service_rate': [], 'p_num': [], 'agent': [], 'util': [], 'var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
+    to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Var, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    load, sr, p_num = 1, 2000, 10
+    load, sr, p_num = 1, 1000, 10
     to_print += evaluate_seeds(('firstfitmd', None, seq, r, load, sr, p_num, tsteps), results)
     to_print += evaluate_seeds(('bestfitmd', None, seq, r, load, sr, p_num, tsteps), results)
     to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, r, load, sr, p_num, tsteps), results)
     to_print += evaluate_seeds(('ppo', 'weights/ppo-r1.pt', seq, r, load, sr, p_num, tsteps), results)
     to_print += evaluate_seeds(('dqn', 'weights/dqn-r1.pt', seq, r, load, sr, p_num, tsteps), results)
-    
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 2, load, sr, p_num, tsteps), results)
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 3, load, sr, p_num, tsteps), results)
 
-    load, sr, p_num = 0.75, 2000, 10
+    load, sr, p_num = 0.75, 1000, 10
     to_print += evaluate_seeds(('firstfitmd', None, seq, r, load, sr, p_num, tsteps), results)
     to_print += evaluate_seeds(('bestfitmd', None, seq, r, load, sr, p_num, tsteps), results)
     to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1-low.pt', seq, r, load, sr, p_num, tsteps), results)

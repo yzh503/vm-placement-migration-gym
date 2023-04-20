@@ -37,6 +37,7 @@ class DQN(nn.Module):
 
     def __init__(self, obs_dims, n_action, hidden_size_1, hidden_size_2):
         super(DQN, self).__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(obs_dims, hidden_size_1),
             nn.ReLU(),
@@ -46,10 +47,12 @@ class DQN(nn.Module):
         )
 
     def forward(self, x):
+        x = x.to(self.device)
         qsa = self.linear_relu_stack(x)
         return qsa
 
     def select_action(self, x): 
+        x = x.to(self.device)
         return self.linear_relu_stack(x).max(1)[1].view(1, 1)
 
 @dataclass
@@ -86,15 +89,15 @@ class DQNAgent(Base):
     def __init__(self, env: VmEnv, config: DQNConfig):
         super().__init__(type(self).__name__, env, config)
         self.env = PreprocessEnv(self.env)
-        self.device = torch.device('cpu') # cpu is faster due to the small size of the network and frequent cpu gpu communication
-        print(f'Device: {self.device}')
+        self.device = torch.device("cpu")
         
         obs_dims = self.env.observation_space.shape[0]
         n_actions = self.env.action_space.n
 
         self.policy_net = DQN(obs_dims, n_actions, self.config.hidden_size_1, self.config.hidden_size_2).to(self.device)
-
+        self.policy_net = torch.compile(self.policy_net)
         self.target_net = DQN(obs_dims, n_actions, self.config.hidden_size_1, self.config.hidden_size_2).to(self.device)
+        self.target_net = torch.compile(self.target_net)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -126,7 +129,7 @@ class DQNAgent(Base):
                 # Select and perform an action
                 action = self._select_action(previous_obs)
                 obs, reward, done, info = self.env.step(action)
-                reward = torch.tensor([reward]).float()
+                reward = torch.tensor([reward], device=self.device)
                 self.memory.push(previous_obs, action, obs, reward)
                 previous_obs = obs
                 current_ep_reward += reward.item()  # For logging
@@ -151,7 +154,7 @@ class DQNAgent(Base):
             ep_returns_median[r] = np.median(ep_returns[r-return_factor:r])
 
     def act(self, observation):
-        return self.policy_net.select_action(observation.float().to(self.device)).cpu()
+        return self.policy_net.select_action(observation)
 
     def _select_action(self, observation):
         EPS_START = self.config.eps_start
@@ -165,7 +168,7 @@ class DQNAgent(Base):
                 return self.act(observation)
         else:
             n_actions = self.env.action_space.n
-            return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
+            return torch.tensor([[random.randrange(n_actions)]], device=self.device, dtype=torch.long)
 
     def _optimize_model(self):
         BATCH_SIZE = self.config.batch_size
@@ -182,11 +185,12 @@ class DQNAgent(Base):
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                            batch.next_state)), dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(self.device)
-        state_batch = torch.cat(batch.state).float().to(self.device)
-        action_batch = torch.cat(batch.action).to(torch.int64).to(self.device)
-        reward_batch = torch.cat(batch.reward).float().to(self.device)
+                                            batch.next_state)), device=self.device, dtype=torch.bool)
+        non_final_next_states = torch.cat([s for s in batch.next_state
+                                                    if s is not None])
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
 
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
@@ -198,7 +202,7 @@ class DQNAgent(Base):
         # on the "older" target_net; selecting their best reward with max(1)[0].
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
-        next_state_values = torch.zeros(BATCH_SIZE).to(self.device)
+        next_state_values = torch.zeros(BATCH_SIZE, device=self.device)
         next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * GAMMA) + reward_batch 
@@ -214,5 +218,5 @@ class DQNAgent(Base):
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
-        return loss.cpu().item()
+        return loss.item()
 

@@ -72,18 +72,18 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
     drop_rates = np.mean(drop_rates, axis=0)
 
     pm_mean_multitests = np.mean(pm_util, axis=2)
-    pm_sd_multitests = np.std(pm_util, axis=2)
-    pm_std = np.mean(pm_sd_multitests, axis=0)
+    pm_var_multitests = np.var(pm_util, axis=2)
+    pm_var = np.mean(pm_var_multitests, axis=0)
 
     to_print = '%s,' % (agent) 
-    to_print += '%.4f,' % (np.mean(returns))
-    to_print += '%.4f,' % (np.mean(drop_rates))
+    to_print += '%.3f,' % (np.mean(returns))
+    to_print += '%.3f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
     to_print += '%d,' % (np.mean(total_suspended))
-    to_print += '%.4f,' % (np.mean(pm_mean_multitests))
-    to_print += '%.4f,' % (np.mean(np.mean(target_util, axis=1)))
-    to_print += '%.4f,' % (np.mean(pm_std))
-    to_print += '%.4f\n' % (np.mean(waiting_ratios))
+    to_print += '%.3f,' % (np.mean(pm_mean_multitests))
+    to_print += '%.3f,' % (np.mean(np.mean(target_util, axis=1)))
+    to_print += '%.3f,' % (np.mean(pm_var))
+    to_print += '%.3f\n' % (np.mean(waiting_ratios))
 
     del records
 
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     
     tsteps = 150000
 
-    to_print = 'Model, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Std, Waiting Ratio\n'
+    to_print = 'Model, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Waiting Ratio\n'
 
     to_print += evaluate_seeds('ppomd', 'weights/ppomd-r1.pt', 'lowuniform', tsteps)
     to_print += evaluate_seeds('firstfitmd', None, 'lowuniform', tsteps)

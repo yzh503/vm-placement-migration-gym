@@ -2,7 +2,6 @@ import ujson
 import yaml
 import numpy as np
 from multiprocessing import Pool
-import pandas as pd
 from os.path import exists
 import copy
 import main 
@@ -33,8 +32,8 @@ def evaluate_seeds(args):
     
     args = []
     records = []
-    for seed in np.arange(0, 10): 
-        recordname = f'data/exp_reward/{r}-{seed}.json'     
+    for seed in np.arange(0, 8): 
+        recordname = f'data/exp_reward/{sr}/{r}-{seed}.json'     
         if exists(recordname):
             print(f"{recordname} exists")
             f = open(recordname, 'r')
@@ -59,10 +58,10 @@ def evaluate_seeds(args):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(5) as pool: 
+        with Pool(8) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
-                recordname = f'data/exp_reward/{r}-{seed}.json'     
+                recordname = f'data/exp_reward/{sr}/{r}-{seed}.json'     
                 record.save(recordname)
                 records.append(record)
 
@@ -88,24 +87,24 @@ def evaluate_seeds(args):
     served_reqs = np.mean(served_reqs, axis=0)
     drop_rates = np.mean(drop_rates, axis=0)
     pm_mean_multitests = np.mean(pm_util, axis=2)
-    pm_sd_multitests = np.std(pm_util, axis=2)
-    pm_std = np.mean(pm_sd_multitests, axis=0)
+    pm_var_multitests = np.var(pm_util, axis=2)
+    pm_var = np.mean(pm_var_multitests, axis=0)
     
     to_print = '%s,' % (agent) 
     to_print += '%s,' % (r)
     to_print += '%.2f,' % (load) 
     to_print += '%d,' % (sr) 
     to_print += '%d,' % (p_num) 
-    to_print += '%.4f,' % (np.mean(returns))
-    to_print += '%.4f,' % (np.mean(drop_rates))
+    to_print += '%.3f,' % (np.mean(returns))
+    to_print += '%.3f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
     to_print += '%d,' % (np.mean(total_suspended))
-    to_print += '%.4f,' % (np.mean(pm_mean_multitests))
-    to_print += '%.4f,' % (np.mean(np.mean(target_util, axis=1)))
-    to_print += '%.4f,' % (np.mean(pm_std))
-    to_print += '%.4f,' % (np.mean(pending_rates))
-    to_print += '%.4f,' % (np.mean(waiting_ratios))
-    to_print += '%.4f\n' % (np.mean(slowdown_rates))
+    to_print += '%.3f,' % (np.mean(pm_mean_multitests))
+    to_print += '%.3f,' % (np.mean(np.mean(target_util, axis=1)))
+    to_print += '%.3f,' % (np.mean(pm_var))
+    to_print += '%.3f,' % (np.mean(pending_rates))
+    to_print += '%.3f,' % (np.mean(waiting_ratios))
+    to_print += '%.3f\n' % (np.mean(slowdown_rates))
 
     return to_print
 
@@ -114,12 +113,12 @@ if __name__ == '__main__':
     print("Evaluating Reward Functions...")
     
     seq, r, tsteps = 'uniform', 1, TOTAL_STEPS
-    to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Std, Pending Rate, Waiting Ratio, Slowdown Rate\n'
+    to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    load, sr, p_num = 1, 2000, 10
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 1, load, sr, p_num, tsteps))
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 2, load, sr, p_num, tsteps))
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 3, load, sr, p_num, tsteps))
+    load, sr, p_num = 1, 1000, 10
+    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1-2k.pt', seq, 1, load, sr, p_num, tsteps))
+    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r2-2k.pt', seq, 2, load, sr, p_num, tsteps))
+    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r3-2k.pt', seq, 3, load, sr, p_num, tsteps))
 
     file = open('data/exp_reward/summary.csv', 'w')
     file.write(to_print)

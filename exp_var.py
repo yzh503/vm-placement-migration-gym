@@ -18,7 +18,7 @@ def evaluate_var(vars, evalmode):
 
         # Only if the service rate is long enough would migration be worthwhile. 
         if evalmode: 
-            config['environment']['service_rate'] = 2000
+            config['environment']['service_rate'] = 1000
             config['environment']['eval_steps'] = 40000
         
         recordname = f'data/exp_var/{var}.json'
@@ -41,7 +41,7 @@ def evaluate_var(vars, evalmode):
                 eval=evalmode,
                 debug=False))
 
-    with Pool(5) as pool: 
+    with Pool(8) as pool: 
         for record in pool.imap_unordered(main.run, args):   
             if record is None: 
                 print('1 training done.')
@@ -50,6 +50,6 @@ def evaluate_var(vars, evalmode):
 
 if __name__ == '__main__': 
     print("Evaluating Variance...")
-    vars = np.around(np.arange(0.01, 1, 0.05), decimals=2)
+    vars = np.around(np.arange(0.01, 1, 0.1), decimals=2)
     evaluate_var(vars, False)
     evaluate_var(vars, True)

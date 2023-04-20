@@ -7,7 +7,7 @@ from multiprocessing import Pool
 from os.path import exists
 import copy 
 
-def evaluate_seeds(args):
+def evaluate(args):
     agent, weightspath, load, sr, tsteps = args
     configfile = open('config/reward1.yml')
     config = yaml.safe_load(configfile)
@@ -47,9 +47,9 @@ def evaluate_seeds(args):
     to_print += '%d,' % (record.suspended[-1])
     to_print += '%d,' % (record.suspended[-1] + record.placed[-1])
     to_print += '%d,' % (np.mean(record.vm_lifetime))
-    to_print += '%.4f,' % (np.mean(record.pending_rates))
-    to_print += '%.4f,' % (np.mean(record.slowdown_rates))
-    to_print += '%.4f' % (np.max(record.slowdown_rates))
+    to_print += '%.3f,' % (np.mean(record.pending_rates))
+    to_print += '%.3f,' % (np.mean(record.slowdown_rates))
+    to_print += '%.3f' % (np.max(record.slowdown_rates))
     del record
     return to_print + '\n'
 
@@ -72,8 +72,8 @@ if __name__ == '__main__':
         args.append(('bestfitmd', None, load, sr, tsteps))
         args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr, tsteps))
     
-    with Pool(5) as pool: 
-        for res in pool.imap_unordered(evaluate_seeds, args): 
+    with Pool(6) as pool: 
+        for res in pool.imap_unordered(evaluate, args): 
             to_print += res
 
     file = open('data/exp_suspension/data.csv', 'w')

@@ -119,8 +119,9 @@ class VmEnv(gym.Env):
 
         if self.config.reward_function == 1: # KL divergence between from approximator to true
             std = np.std(self.pm_utilisation) 
-            current = Normal(np.mean(self.pm_utilisation), std if std > 0 else self.config.var)
-            target = Normal(target_util_mean, np.sqrt(self.config.var))
+            target_sd = np.sqrt(self.config.var)
+            current = Normal(np.mean(self.pm_utilisation), std if std > 0 else target_sd)
+            target = Normal(target_util_mean, target_sd)
             if target_util_mean == 0:
                 reward = 0.0
             else:

@@ -2,6 +2,14 @@
 
 This repo contains the gym environment for VM placement and migration. You may trian DQN and PPO agents for automatic VM placement and migration in this environment.
 
+## Requirements
+
+Python 3.10.*
+
+```shell
+pip install -r requirements.txt
+```
+
 To see help,
 
 ```shell
@@ -25,7 +33,9 @@ python main.py -a dqn -e -o results/dqn.json
 To run all experiments (with 5+ CPU cores),
 
 ```shell
-./run_experiments.sh
+chmod +x train.sh exp.sh
+./train.sh
+./exp.sh
 ```
 
 The experiment results are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
@@ -51,3 +61,7 @@ environment:
     1. "uniform": Unif(0.1,1)
     2. "lowuniform": Unif(0.1,0.65)
     3. "highuniform": Unif(0.25,1)
+
+## Notice
+
+Numpy warnings from training DQN are related to progress bar so it does not affect training.

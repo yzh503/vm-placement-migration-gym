@@ -1,4 +1,4 @@
-gym==0.21.0
+gym==0.26.2
 matplotlib==3.5.2
 numpy==1.23.0
 pandas==1.4.2
@@ -9,3 +9,4 @@ torchaudio==2.0.1
 torchvision==0.15.1
 tqdm==4.64.0
 ujson==5.7.0
+tensorboard==2.12.2
