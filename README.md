@@ -2,13 +2,23 @@
 
 This repo contains the gym environment for VM placement and migration. You may trian DQN and PPO agents for automatic VM placement and migration in this environment.
 
-## Requirements
+
+
+## Experiment data and plots
+
+Experiment data are located in `data`. Plots are located in `plot`.
+
+## Re-run Experiments
+
+### Requirements
 
 Python 3.10.*
 
 ```shell
 pip install -r requirements.txt
 ```
+
+### Examples
 
 To see help,
 
@@ -37,7 +47,9 @@ chmod +x run.sh
 ./run.sh
 ```
 
-The experiment results are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
+If you have less than 8 cores, modify the `run.sh` and `exp_*.py` files so that it accomodates your CPU.
+
+The experiment data are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
 
 ## Configuration
 
@@ -57,6 +69,6 @@ environment:
     3. reward 3 in the paper
 - cap_target_util: cap the upper limit of target utilisation to 100%
 - sequence:
-    1. "uniform": Unif(0.1,1)
-    2. "lowuniform": Unif(0.1,0.65)
-    3. "highuniform": Unif(0.25,1)
+    1. "uniform": VM size follows Unif(0.1,1)
+    2. "lowuniform": VM size follows Unif(0.1,0.65)
+    3. "highuniform": VM size follows Unif(0.25,1)
