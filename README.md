@@ -30,12 +30,11 @@ To test the dqn agent and save results in `results/dqn.json`:
 python main.py -a dqn -e -o results/dqn.json
 ```
 
-To run all experiments (with 5+ CPU cores),
+To run all experiments (with 8 CPU cores),
 
 ```shell
-chmod +x train.sh exp.sh
-./train.sh
-./exp.sh
+chmod +x run.sh
+./run.sh
 ```
 
 The experiment results are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
@@ -61,7 +60,3 @@ environment:
     1. "uniform": Unif(0.1,1)
     2. "lowuniform": Unif(0.1,0.65)
     3. "highuniform": Unif(0.25,1)
-
-## Notice
-
-Numpy warnings from training DQN are related to progress bar so it does not affect training.
