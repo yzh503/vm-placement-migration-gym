@@ -37,7 +37,6 @@ class DQN(nn.Module):
 
     def __init__(self, obs_dims, n_action, hidden_size_1, hidden_size_2):
         super(DQN, self).__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(obs_dims, hidden_size_1),
             nn.ReLU(),
@@ -47,12 +46,10 @@ class DQN(nn.Module):
         )
 
     def forward(self, x):
-        x = x.to(self.device)
         qsa = self.linear_relu_stack(x)
         return qsa
 
     def select_action(self, x): 
-        x = x.to(self.device)
         return self.linear_relu_stack(x).max(1)[1].view(1, 1)
 
 @dataclass
