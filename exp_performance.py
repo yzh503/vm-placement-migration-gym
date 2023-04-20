@@ -66,7 +66,7 @@ def evaluate_seeds(args, results):
                 record.save(recordname)
                 records.append(record)
 
-    returns, served_reqs, pm_util, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
+    returns, served_reqs, pm_util, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], []
     total_suspended = []
     total_served = []
     for record in records:

@@ -41,7 +41,7 @@ def evaluate_var(vars, evalmode):
                 eval=evalmode,
                 debug=False))
 
-    with Pool(8) as pool: 
+    with Pool(6) as pool: 
         for record in pool.imap_unordered(main.run, args):   
             if record is None: 
                 print('1 training done.')

@@ -66,13 +66,13 @@ if __name__ == '__main__':
         args.append(('bestfitmd', None, load, sr, tsteps))
         args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr, tsteps))
 
-    sr = 2000
+    sr = 1000
     for load in np.arange(0.2, 1.2, 0.1):
         args.append(('firstfitmd', None, load, sr, tsteps))
         args.append(('bestfitmd', None, load, sr, tsteps))
         args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr, tsteps))
     
-    with Pool(6) as pool: 
+    with Pool(8) as pool: 
         for res in pool.imap_unordered(evaluate, args): 
             to_print += res
 
