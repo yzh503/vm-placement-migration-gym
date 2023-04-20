@@ -15,11 +15,16 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
 
     config['environment']['eval_steps'] = tsteps
     config['environment']['sequence'] = seq
-    
+
+    if seq == 'lowuniform':
+        config['environment']['arrival_rate'] = config['environment']['p_num']/0.375/config['environment']['service_rate']
+    elif seq == 'highuniform':
+        config['environment']['arrival_rate'] = config['environment']['p_num']/0.625/config['environment']['service_rate']
+
     args = []
     records = []
-    for seed in np.arange(0, 10): 
-        recordname = f"data/exp_vm_size/{agent}-{seed}.json"
+    for seed in np.arange(0, 8): 
+        recordname = f"data/exp_vm_size/{agent}-{seq}-{seed}.json"
         if exists(recordname):
             print(recordname + ' exists')
             f = open(recordname, 'r')
@@ -44,10 +49,10 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(5) as pool: 
+        with Pool(8) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
-                recordname = f"data/exp_vm_size/{agent}-{seed}.json"
+                recordname = f"data/exp_vm_size/{agent}-{seq}-{seed}.json"
                 record.save(recordname)
                 records.append(record)
 
@@ -76,14 +81,15 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
     pm_var = np.mean(pm_var_multitests, axis=0)
 
     to_print = '%s,' % (agent) 
-    to_print += '%.3f,' % (np.mean(returns))
-    to_print += '%.3f,' % (np.mean(drop_rates))
+    to_print += '%s,' % (seq) 
+    to_print += '%.4f,' % (np.mean(returns))
+    to_print += '%.4f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
     to_print += '%d,' % (np.mean(total_suspended))
-    to_print += '%.3f,' % (np.mean(pm_mean_multitests))
-    to_print += '%.3f,' % (np.mean(np.mean(target_util, axis=1)))
-    to_print += '%.3f,' % (np.mean(pm_var))
-    to_print += '%.3f\n' % (np.mean(waiting_ratios))
+    to_print += '%.4f,' % (np.mean(pm_mean_multitests))
+    to_print += '%.4f,' % (np.mean(np.mean(target_util, axis=1)))
+    to_print += '%.4f,' % (np.mean(pm_var))
+    to_print += '%.4f\n' % (np.mean(waiting_ratios))
 
     del records
 
@@ -94,7 +100,7 @@ if __name__ == '__main__':
     
     tsteps = 150000
 
-    to_print = 'Model, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Waiting Ratio\n'
+    to_print = 'Model, Seq, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Waiting Ratio\n'
 
     to_print += evaluate_seeds('ppomd', 'weights/ppomd-r1.pt', 'lowuniform', tsteps)
     to_print += evaluate_seeds('firstfitmd', None, 'lowuniform', tsteps)
