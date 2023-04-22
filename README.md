@@ -62,6 +62,15 @@ The experiment data are saved in `data`. When the experiments complete, draw plo
 - bestfitmd (multi discrete action space)
 - random (single discrete action space)
 
+## Experiments
+
+- `exp_performance`: performance evaluation of the proposed approach against the baselines. 
+- `exp_reward`: evaluation of the reward functions.
+- `exp_var`: evaluation of target variance.
+- `exp_suspension`: evaluation of service length and system load.
+- `exp_training`: the episodic returns.
+- `exp_vm_size`: evaluation of VM size. 
+
 ## Configuration
 
 environment:
