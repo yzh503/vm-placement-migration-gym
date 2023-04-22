@@ -1,12 +1,12 @@
 # A Unified Approach to Virtual Machine Placement and Migration in the Cloud using Deep Reinforcement Learning
 
-This repo contains the gym environment for VM placement and migration. You may trian DQN and PPO agents for automatic VM placement and migration in this environment.
+This repo contains the gym environment for VM placement and migration. You may trian or evaluate DQN and PPO agents for automatic VM placement and migration in this environment.
 
 
 
 ## Experiment data and plots
 
-Experiment data are located in `data`. Plots are located in `plot`.
+Experiment data are located in `data`. Plots are located in `plots`.
 
 ## Re-run Experiments
 
@@ -50,6 +50,17 @@ chmod +x run.sh
 If you have less than 8 cores, modify the `run.sh` and `exp_*.py` files so that it accomodates your CPU.
 
 The experiment data are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
+
+## Agents
+
+- ppo (single discrete action space)
+- ppomd (multi discrete action space)
+- dqn (single discrete action space)
+- firstfit (single discrete action space)
+- firstfitmd (multi discrete action space)
+- bestfit (single discrete action space)
+- bestfitmd (multi discrete action space)
+- random (single discrete action space)
 
 ## Configuration
 
