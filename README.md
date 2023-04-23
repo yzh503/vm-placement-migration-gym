@@ -40,7 +40,9 @@ To test the dqn agent and save results in `results/dqn.json`:
 python main.py -a dqn -e -o results/dqn.json
 ```
 
-To run all experiments (with 8 CPU cores),
+Inspect and update the experiment parallellism in `exp_config.py` depending on your machine.
+
+To run all experiments,
 
 ```shell
 chmod +x run.sh
@@ -53,14 +55,16 @@ The experiment data are saved in `data`. When the experiments complete, draw plo
 
 ## Agents
 
-- ppo (single discrete action space)
-- ppomd (multi discrete action space)
-- dqn (single discrete action space)
-- firstfit (single discrete action space)
-- firstfitmd (multi discrete action space)
-- bestfit (single discrete action space)
-- bestfitmd (multi discrete action space)
-- random (single discrete action space)
+- ppo
+- ppomd
+- dqn
+- firstfit
+- firstfitmd
+- bestfit
+- bestfitmd
+- random
+
+where "md" means multi-discrete action space.
 
 ## Experiments
 

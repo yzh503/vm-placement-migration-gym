@@ -4,6 +4,7 @@ import numpy as np
 from multiprocessing import Pool
 from os.path import exists
 import copy
+from exp_config import cores
 
 def evaluate_var(vars, evalmode):
     configfile = open('config/reward1.yml')
@@ -41,7 +42,7 @@ def evaluate_var(vars, evalmode):
                 eval=evalmode,
                 debug=False))
 
-    with Pool(6) as pool: 
+    with Pool(cores) as pool: 
         for record in pool.imap_unordered(main.run, args):   
             if record is None: 
                 print('1 training done.')

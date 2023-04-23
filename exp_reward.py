@@ -6,8 +6,7 @@ from os.path import exists
 import copy
 import main 
 from src.record import Record
-
-TOTAL_STEPS = 150000
+from exp_config import cores, multiruns, episodes
 
 def evaluate_seeds(args):
 
@@ -32,7 +31,7 @@ def evaluate_seeds(args):
     
     args = []
     records = []
-    for seed in np.arange(0, 8): 
+    for seed in np.arange(0, multiruns): 
         recordname = f'data/exp_reward/{sr}/{r}-{seed}.json'     
         if exists(recordname):
             print(f"{recordname} exists")
@@ -58,7 +57,7 @@ def evaluate_seeds(args):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(8) as pool: 
+        with Pool(cores) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
                 recordname = f'data/exp_reward/{sr}/{r}-{seed}.json'     
@@ -112,13 +111,13 @@ if __name__ == '__main__':
 
     print("Evaluating Reward Functions...")
     
-    seq, r, tsteps = 'uniform', 1, TOTAL_STEPS
+    seq, r, tsteps = 'uniform', 1, episodes
     to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
     load, sr, p_num = 1, 1000, 10
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1-2k.pt', seq, 1, load, sr, p_num, tsteps))
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r2-2k.pt', seq, 2, load, sr, p_num, tsteps))
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r3-2k.pt', seq, 3, load, sr, p_num, tsteps))
+    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 1, load, sr, p_num, tsteps))
+    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r2.pt', seq, 2, load, sr, p_num, tsteps))
+    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r3.pt', seq, 3, load, sr, p_num, tsteps))
 
     file = open('data/exp_reward/summary.csv', 'w')
     file.write(to_print)

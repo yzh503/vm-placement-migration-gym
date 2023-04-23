@@ -7,8 +7,7 @@ from os.path import exists
 import copy
 import main 
 from src.record import Record
-
-TOTAL_STEPS = 150000
+from exp_config import cores, multiruns, episodes
 
 def evaluate_seeds(args, results):
 
@@ -33,7 +32,7 @@ def evaluate_seeds(args, results):
     
     args = []
     records = []
-    for seed in np.arange(0, 8): 
+    for seed in np.arange(0, multiruns): 
         recordname = 'data/exp_performance/p%ssr%dload%.2f/%s-%d.json' % (config['environment']['p_num'], sr, load, agent, seed)        
         if exists(recordname):
             print(f"{recordname} exists")
@@ -59,7 +58,7 @@ def evaluate_seeds(args, results):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(8) as pool: 
+        with Pool(cores) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
                 recordname = 'data/exp_performance/p%ssr%dload%.2f/%s-%d.json' % (config['environment']['p_num'], sr, load, agent, seed)     
@@ -89,17 +88,17 @@ def evaluate_seeds(args, results):
     pm_var_multitests = np.var(pm_util, axis=2)
     pm_var = np.mean(pm_var_multitests, axis=0)
     
-    results['agent'] += [agent] * TOTAL_STEPS
-    results['load'] += [load] * TOTAL_STEPS
-    results['service_rate'] += [sr] * TOTAL_STEPS
-    results['p_num'] += [p_num] * TOTAL_STEPS
-    results['step'] += np.arange(1, TOTAL_STEPS + 1, 1, dtype=int).tolist()
+    results['agent'] += [agent] * episodes
+    results['load'] += [load] * episodes
+    results['service_rate'] += [sr] * episodes
+    results['p_num'] += [p_num] * episodes
+    results['step'] += np.arange(1, episodes + 1, 1, dtype=int).tolist()
     results['util'] += np.mean(pm_mean_multitests, axis=0).tolist()
     results['var'] += pm_var.tolist()
     results['served'] += served_reqs.tolist()
     results['suspended'] += np.mean(suspended, axis=0).tolist()
     results['waiting_ratio'] += np.mean(waiting_ratios, axis=0).tolist()
-    results['slowdown_rates'] += [np.mean(slowdown_rates)] * TOTAL_STEPS
+    results['slowdown_rates'] += [np.mean(slowdown_rates)] * episodes
 
     to_print = '%s,' % (agent) 
     to_print += '%s,' % (r)
@@ -123,7 +122,7 @@ if __name__ == '__main__':
 
     print("Evaluating Performance...")
     
-    seq, r, tsteps = 'uniform', 1, TOTAL_STEPS
+    seq, r, tsteps = 'uniform', 1, episodes
 
     results = {'step': [], 'load': [], 'service_rate': [], 'p_num': [], 'agent': [], 'util': [], 'var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Var, Pending Rate, Waiting Ratio, Slowdown Rate\n'

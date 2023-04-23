@@ -7,13 +7,14 @@ from multiprocessing import Pool
 import pandas as pd
 from os.path import exists
 import copy 
+from exp_config import cores, multiruns, episodes
 
-def evaluate_seeds(agent, weightspath, seq, tsteps):
+def evaluate_seeds(agent, weightspath, seq):
 
     configfile = open('config/reward1.yml')
     config = yaml.safe_load(configfile)
 
-    config['environment']['eval_steps'] = tsteps
+    config['environment']['eval_steps'] = episodes
     config['environment']['sequence'] = seq
 
     if seq == 'lowuniform':
@@ -23,7 +24,7 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
 
     args = []
     records = []
-    for seed in np.arange(0, 8): 
+    for seed in np.arange(0, multiruns): 
         recordname = f"data/exp_vm_size/{agent}-{seq}-{seed}.json"
         if exists(recordname):
             print(recordname + ' exists')
@@ -49,7 +50,7 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(8) as pool: 
+        with Pool(cores) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
                 recordname = f"data/exp_vm_size/{agent}-{seq}-{seed}.json"
@@ -98,17 +99,15 @@ def evaluate_seeds(agent, weightspath, seq, tsteps):
 if __name__ == '__main__':
     print("Evaluating VM Size...")
     
-    tsteps = 150000
-
     to_print = 'Model, Seq, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Waiting Ratio\n'
 
-    to_print += evaluate_seeds('ppomd', 'weights/ppomd-r1.pt', 'lowuniform', tsteps)
-    to_print += evaluate_seeds('firstfitmd', None, 'lowuniform', tsteps)
-    to_print += evaluate_seeds('bestfitmd', None, 'lowuniform', tsteps)
+    to_print += evaluate_seeds('ppomd', 'weights/ppomd-r1.pt', 'lowuniform')
+    to_print += evaluate_seeds('firstfitmd', None, 'lowuniform')
+    to_print += evaluate_seeds('bestfitmd', None, 'lowuniform')
 
-    to_print += evaluate_seeds('ppomd', 'weights/ppomd-r1.pt', 'highuniform', tsteps)
-    to_print += evaluate_seeds('firstfitmd', None, 'highuniform', tsteps)
-    to_print += evaluate_seeds('bestfitmd', None, 'highuniform', tsteps)
+    to_print += evaluate_seeds('ppomd', 'weights/ppomd-r1.pt', 'highuniform')
+    to_print += evaluate_seeds('firstfitmd', None, 'highuniform')
+    to_print += evaluate_seeds('bestfitmd', None, 'highuniform')
     
     file = open('data/exp_vm_size/summary.csv', 'w')
     file.write(to_print)

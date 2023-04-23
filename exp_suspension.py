@@ -6,14 +6,15 @@ import numpy as np
 from multiprocessing import Pool
 from os.path import exists
 import copy 
+from exp_config import cores, episodes
 
 def evaluate(args):
-    agent, weightspath, load, sr, tsteps = args
+    agent, weightspath, load, sr = args
     configfile = open('config/reward1.yml')
     config = yaml.safe_load(configfile)
 
     config['environment']['service_rate'] = sr
-    config['environment']['eval_steps'] = tsteps
+    config['environment']['eval_steps'] = episodes
     config['environment']['arrival_rate'] = int(config['environment']['p_num'])/0.55/int(config['environment']['service_rate']) * load
 
     args = []
@@ -56,23 +57,22 @@ def evaluate(args):
 if __name__ == '__main__':
     print("Evaluating Service Rate and Load...")
 
-    tsteps = 150000
     to_print = 'Agent, Load, Serv Rate, Total Served, Valid Suspend Actions, Valid Actions, Life, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
     load = 1
     for sr in np.arange(100, 4100, 200):
-        args.append(('firstfitmd', None, load, sr, tsteps))
-        args.append(('bestfitmd', None, load, sr, tsteps))
-        args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr, tsteps))
+        args.append(('firstfitmd', None, load, sr))
+        args.append(('bestfitmd', None, load, sr))
+        args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr))
 
     sr = 1000
     for load in np.arange(0.2, 1.2, 0.1):
-        args.append(('firstfitmd', None, load, sr, tsteps))
-        args.append(('bestfitmd', None, load, sr, tsteps))
-        args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr, tsteps))
+        args.append(('firstfitmd', None, load, sr))
+        args.append(('bestfitmd', None, load, sr))
+        args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr))
     
-    with Pool(8) as pool: 
+    with Pool(cores) as pool: 
         for res in pool.imap_unordered(evaluate, args): 
             to_print += res
 
