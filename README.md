@@ -40,7 +40,7 @@ To test the dqn agent and save results in `results/dqn.json`:
 python main.py -a dqn -e -o results/dqn.json
 ```
 
-Inspect and update the experiment parallellism in `exp_config.py` depending on your machine.
+Inspect and update the experiment parallelisability in `exp_config.py` depending on your machine. If you have less than 8 cores, modify `cores`. If you have less than 40GB memory, reduce `multiruns`. 
 
 To run all experiments,
 
@@ -49,7 +49,7 @@ chmod +x run.sh
 ./run.sh
 ```
 
-If you have less than 8 cores, modify the `run.sh` and `exp_*.py` files so that it accomodates your CPU.
+
 
 The experiment data are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
 
