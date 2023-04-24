@@ -66,7 +66,7 @@ The experiment data are saved in `data`. When the experiments complete, draw plo
 
 where "md" means multi-discrete action space.
 
-## Experiments
+## Experiment Results
 
 - `exp_performance`: performance evaluation of the proposed approach against the baselines. 
 - `exp_reward`: evaluation of the reward functions.
