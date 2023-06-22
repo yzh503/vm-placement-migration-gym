@@ -22,7 +22,7 @@ def convert_obs_to_dict(v_num: int, observation: list) -> dict:
         vm_placement=[int(i) for i in observation[:v_num]], 
         vm_resource=observation[v_num:v_num*2], 
         vm_remaining_runtime=[int(i) for i in observation[v_num*2:v_num*3]], 
-        pm_utilisation=observation[v_num*3:]
+        cpu=observation[v_num*3:]
     )
 
 def check_dir(output: str):

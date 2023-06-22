@@ -62,7 +62,10 @@ class Base:
             self.env.test = 0
             action = self.act(obs)
             if debug: 
-                print('action: \t\t%s' % ((action - 1).flatten().tolist()))
+                if type(action) == int:
+                    print('action: \t\t%d' % (action - 1))
+                else:
+                    print('action: \t\t%s' % ((action - 1).flatten().tolist()))
             obs, reward, done, info = self.env.step(action, eval_mode=True)
             if debug: 
                 print('validity: \t\t%s' % (info['valid']))
@@ -88,10 +91,10 @@ class Base:
             print(self.env.config)
             for k, v in summary.items():
                 print('%s: %.2f' % (k, v))
-            print('pm utilisation: %s' % (info['pm_utilisation']))
+            print('pm utilisation: %s' % (info['cpu']))
     
         fig, axs = plt.subplots(2, figsize=(6, 2))
-        im = axs[0].imshow(np.transpose(np.array(self.record.pm_utilisation)), cmap='pink', interpolation='nearest', aspect='auto', vmin=0, vmax=1)
+        im = axs[0].imshow(np.transpose(np.array(self.record.cpu)), cmap='pink', interpolation='nearest', aspect='auto', vmin=0, vmax=1)
         axs[0].set(yticks=np.arange(0, self.env.config.p_num, dtype=int))
         axs[0].set(xlabel="Time step")
         axs[0].set(ylabel="PM #")
@@ -115,8 +118,8 @@ class Base:
             self.writer.close()
 
     def record_testing_step(self, step: int, obs: np.ndarray, reward: float, info):
-        self.record.pm_utilisation.append(info["pm_utilisation"])
-        self.record.used_pm.append(len(info["pm_utilisation"]) - np.count_nonzero(info["pm_utilisation"]))
+        self.record.cpu.append(info["cpu"])
+        self.record.used_pm.append(len(info["cpu"]) - np.count_nonzero(info["cpu"]))
         self.record.vm_placements.append(info["vm_placement"])
         self.record.waiting_ratio.append(info['waiting_ratio'])
         self.record.actions.append(info["action"])

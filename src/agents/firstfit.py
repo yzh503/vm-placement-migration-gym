@@ -24,14 +24,14 @@ class FirstFitAgent(Base):
     def act(self, observation):
         obsdict = utils.convert_obs_to_dict(self.env.config.v_num, observation)
         vm_placement = np.array(obsdict["vm_placement"])
-        pm_utilisation = np.array(obsdict["pm_utilisation"])
+        cpu = np.array(obsdict["cpu"])
         vm_resource = np.array(obsdict["vm_resource"])
         action_vms = np.argwhere(vm_placement == -1)
         action_vm = 0 if action_vms.size == 0 else int(action_vms[0])
         action_pm = 0
 
-        for p in range(len(pm_utilisation)): 
-            if pm_utilisation[p] + vm_resource[action_vm] <= 1: 
+        for p in range(len(cpu)): 
+            if cpu[p] + vm_resource[action_vm] <= 1: 
                 action_pm = p 
                 break
 

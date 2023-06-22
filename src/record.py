@@ -10,7 +10,7 @@ class Record:
         self.training_config = training_config if isinstance(training_config, dict) else vars(training_config)
 
         # Below records the info for each step in testing.
-        self.pm_utilisation = list[float]()
+        self.cpu = list[float]()
         self.used_pm = list[int]()
         self.vm_placements = list[float]()
         self.waiting_ratio = list[float]()
@@ -125,9 +125,9 @@ class Record:
             'median slowdown': np.round(np.median(self.slowdown_rates), 3), 
             'max slowdown': np.round(np.max(self.slowdown_rates), 3),
             'drop rate': np.round(np.mean(self.drop_rate), 3),
-            'pm utilisation mean (second half)': np.round(np.mean(self.pm_utilisation[len(self.pm_utilisation)//2:]), 3),
+            'pm utilisation mean (second half)': np.round(np.mean(self.cpu[len(self.cpu)//2:]), 3),
             'pm utilisation mean target (second half)': np.round(np.mean(self.target_util_mean[len(self.target_util_mean)//2:]), 3),
-            'pm utilisation std (second half)': np.round(np.std(self.pm_utilisation[len(self.pm_utilisation)//2:]), 3),
+            'pm utilisation std (second half)': np.round(np.std(self.cpu[len(self.cpu)//2:]), 3),
         }
     
     def save(self, path: str):
@@ -141,7 +141,7 @@ class Record:
     def import_record(cls, agent: str, jsondict: dict):
         record = cls(agent, jsondict['env_config'], jsondict['training_config']) 
 
-        record.pm_utilisation = jsondict['pm_utilisation']
+        record.cpu = jsondict['cpu']
         if 'used_pm' in jsondict:
             record.used_pm = jsondict['used_pm']
         record.vm_placements = jsondict['vm_placements']

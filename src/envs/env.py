@@ -51,7 +51,7 @@ class VmEnv(gym.Env):
         self.rng4 = np.random.default_rng(self.config.seed)
 
         
-        # [vm_placement, vm_remaining_runtime, vm_resource, pm_utilisation]
+        # [vm_placement, vm_remaining_runtime, vm_resource, cpu]
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(self.config.v_num * 3 + self.config.p_num,1), dtype=np.float32) 
         self.action_space = spaces.Discrete(self.config.v_num * (self.config.p_num + 1)) # VMs * (PMs + wait status)
 
@@ -77,18 +77,18 @@ class VmEnv(gym.Env):
         action_valid = action_valid and not (self.vm_placement[vm_index] == EMPTY_SLOT) 
         action_valid = action_valid and not (self.vm_placement[vm_index] == vm_index)
         action_valid = action_valid and not (self.vm_placement[vm_index] > WAIT_STATUS and vm_action > WAIT_STATUS)
-        action_valid = action_valid and not (self.pm_utilisation[vm_action] + self.vm_resource[vm_index] > 1)
+        action_valid = action_valid and not (self.cpu[vm_action] + self.vm_resource[vm_index] > 1)
 
 
         if action_valid: 
             previous_pm = self.vm_placement[vm_index] 
             self.vm_placement[vm_index] = vm_action
             if vm_action == -1:  # Free up PM
-                self.pm_utilisation[previous_pm] -= self.vm_resource[vm_index]
+                self.cpu[previous_pm] -= self.vm_resource[vm_index]
                 self.vm_suspended[vm_index] = 1
                 self.suspend_action += 1
             else:
-                self.pm_utilisation[vm_action] += self.vm_resource[vm_index]
+                self.cpu[vm_action] += self.vm_resource[vm_index]
                 if self.vm_suspended[vm_index] == 0:
                     self.served_requests += 1
                 self.vm_suspended[vm_index] = 0
@@ -111,23 +111,23 @@ class VmEnv(gym.Env):
         
         vms_arrived = np.count_nonzero(self.vm_placement > EMPTY_SLOT)
         waiting_ratio = np.count_nonzero(self.vm_placement == WAIT_STATUS) / vms_arrived if vms_arrived > 0 else 0
-        used_pm_ratio = np.count_nonzero(self.pm_utilisation > 0) / self.config.p_num
+        used_pm_ratio = np.count_nonzero(self.cpu > 0) / self.config.p_num
         target_util_mean = np.sum(self.vm_resource[self.vm_placement != EMPTY_SLOT]) / self.config.p_num
 
         if self.config.cap_target_util and target_util_mean > 1: 
             target_util_mean = 1.0
 
         if self.config.reward_function == 1: # KL divergence between from approximator to true
-            std = np.std(self.pm_utilisation) 
+            std = np.std(self.cpu) 
             target_sd = np.sqrt(self.config.var)
-            current = Normal(np.mean(self.pm_utilisation), std if std > 0 else target_sd)
+            current = Normal(np.mean(self.cpu), std if std > 0 else target_sd)
             target = Normal(target_util_mean, target_sd)
             if target_util_mean == 0:
                 reward = 0.0
             else:
                 reward = - kl_divergence(target,current).item()      
         elif self.config.reward_function == 2: 
-            util = self.pm_utilisation[self.pm_utilisation > 0]
+            util = self.cpu[self.cpu > 0]
             if util.size > 0: 
                 reward = np.mean(util)
             else:
@@ -155,7 +155,8 @@ class VmEnv(gym.Env):
             "timestep": self.timestep,
             "vm_arrival_steps": self.vm_arrival_steps,
             "vm_placement": self.vm_placement.copy(), 
-            "pm_utilisation": self.pm_utilisation.copy(),
+            "cpu": self.cpu.copy(),
+            "memory": self.memory.copy(),
             "target_util_mean": target_util_mean,
             'total_resource_requested': self.total_resource_requested,
         }
@@ -173,7 +174,8 @@ class VmEnv(gym.Env):
         # Observable
         self.vm_placement = np.full(self.config.v_num, EMPTY_SLOT) # -1 is a VM request. -2 is an empty slot. 0... are PM indices. 
         self.vm_resource = np.zeros(self.config.v_num) 
-        self.pm_utilisation = np.zeros(self.config.p_num)
+        self.cpu = np.zeros(self.config.p_num)
+        self.memory = np.zeros(self.config.p_num)
         self.vm_remaining_runtime = np.zeros(self.config.v_num, dtype=int)
         # Not in observation
         self.timestep = 1
@@ -214,7 +216,7 @@ class VmEnv(gym.Env):
         print(f"VM placement: \t\t{self.vm_placement}")
         print(f"VM suspended: \t\t{self.vm_suspended}")
         print(f"VM resources (%): \t{np.array(self.vm_resource*100, dtype=int)} {np.round(np.sum(self.vm_resource), 3)}")
-        print(f"PM utilisation (%): \t{np.array(self.pm_utilisation*100, dtype=int)} {np.round(np.sum(self.pm_utilisation), 3)}")
+        print(f"PM utilisation (%): \t{np.array(self.cpu*100, dtype=int)} {np.round(np.sum(self.cpu), 3)}")
         print(f"VM waiting time: \t{self.vm_waiting_time}")
         print(f"VM planned runtime: \t{self.vm_planned_runtime}")
         print(f"VM remaining runtime: \t{self.vm_remaining_runtime}")
@@ -238,7 +240,7 @@ class VmEnv(gym.Env):
 
             # Multiple VMs could be on the same PM, so use a loop to free up iteratively
             for vm, pm in zip(vm_to_terminate, pms_to_free_up): 
-                self.pm_utilisation[pm] -= self.vm_resource[vm]
+                self.cpu[pm] -= self.vm_resource[vm]
 
             self.vm_resource[vm_to_terminate] = 0
             self.vm_planned_runtime[vm_to_terminate] = 0
@@ -246,7 +248,7 @@ class VmEnv(gym.Env):
             self.vm_remaining_runtime[vm_to_terminate] = 0
             self.vm_suspended[vm_to_terminate] = 0
 
-        self.pm_utilisation[self.pm_utilisation < 1e-7] = 0 # precision problem 
+        self.cpu[self.cpu < 1e-7] = 0 # precision problem 
         
     def _accept_vm_requests(self):
         arrivals = self.rng3.poisson(self.config.arrival_rate)
@@ -266,4 +268,4 @@ class VmEnv(gym.Env):
             self.vm_arrival_steps[i].append(self.timestep + 1) # Arrival at next step
 
     def _observation(self):
-        return np.concatenate((self.vm_placement, self.vm_resource, self.vm_remaining_runtime, self.pm_utilisation))
+        return np.concatenate((self.vm_placement, self.vm_resource, self.vm_remaining_runtime, self.cpu))

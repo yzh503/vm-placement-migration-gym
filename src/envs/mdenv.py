@@ -14,19 +14,19 @@ class MultiDiscreteVmEnv(VmEnv):
 
         self.config = config
         
-        # [vm_placement, vm_remaining_runtime, vm_resource, pm_utilisation]
+        # [vm_placement, vm_remaining_runtime, vm_resource, cpu]
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(self.config.v_num * 3 + self.config.p_num,1), dtype=np.float32) 
         self.action_space = spaces.MultiDiscrete(np.full(self.config.v_num , self.config.p_num + 1))  # Every VM has (PMs + wait status) actions
         self.reset()
 
     def _placement_valid(self, pm, vm):
-        return self.pm_utilisation[pm] + self.vm_resource[vm] > 1
+        return self.cpu[pm] + self.vm_resource[vm] > 1
 
     def _free_pm(self, pm, vm):
-        self.pm_utilisation[pm] -= self.vm_resource[vm]
+        self.cpu[pm] -= self.vm_resource[vm]
     
     def _place_vm(self, pm, vm):
-        self.pm_utilisation[pm] += self.vm_resource[vm]
+        self.cpu[pm] += self.vm_resource[vm]
 
     def step(self, action, eval_mode=False):
         

@@ -57,14 +57,14 @@ def evaluate_seeds(agent, weightspath, seq):
                 record.save(recordname)
                 records.append(record)
 
-    returns, served_reqs, pm_util, target_util, drop_rates, suspended, waiting_ratios = [], [], [], [], [], [], []
+    returns, served_reqs, cpu, target_util, drop_rates, suspended, waiting_ratios = [], [], [], [], [], [], []
     total_suspended = []
     total_served = []
     for record in records:
         returns.append(record.total_rewards)
         served_reqs.append(record.served_requests)
         total_served.append(record.served_requests[-1])
-        pm_util.append(record.pm_utilisation)
+        cpu.append(record.cpu)
         target_util.append(record.target_util_mean)
         drop_rates.append(record.drop_rate)
         suspended.append(record.suspended)
@@ -72,13 +72,13 @@ def evaluate_seeds(agent, weightspath, seq):
         waiting_ratios.append(record.waiting_ratio) 
     
     returns = np.array(returns)
-    pm_util = np.array(pm_util) # dim 0: multiple tests, dim 1: testing steps, dim 2: pms 
+    cpu = np.array(cpu) # dim 0: multiple tests, dim 1: testing steps, dim 2: pms 
     target_util = np.array(target_util)
     served_reqs = np.mean(served_reqs, axis=0)
     drop_rates = np.mean(drop_rates, axis=0)
 
-    pm_mean_multitests = np.mean(pm_util, axis=2)
-    pm_var_multitests = np.var(pm_util, axis=2)
+    pm_mean_multitests = np.mean(cpu, axis=2)
+    pm_var_multitests = np.var(cpu, axis=2)
     pm_var = np.mean(pm_var_multitests, axis=0)
 
     to_print = '%s,' % (agent) 
