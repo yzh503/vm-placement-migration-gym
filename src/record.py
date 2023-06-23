@@ -11,6 +11,7 @@ class Record:
 
         # Below records the info for each step in testing.
         self.cpu = list[float]()
+        self.memory = list[float]()
         self.used_pm = list[int]()
         self.vm_placements = list[float]()
         self.waiting_ratio = list[float]()
@@ -19,9 +20,11 @@ class Record:
         self.dropped_requests = list[int]()
         self.total_requests = list[int]()
         self.vm_arrival_steps = list[int]()
-        self.target_util_mean = list[int]()
+        self.target_cpu_mean = list[int]()
+        self.target_memory_mean = list[int]()
         self.served_requests = list[int]()
-        self.total_resource_requested = list[int]()
+        self.total_cpu_requested = list[int]()
+        self.total_memory_requested = list[int]()
         self.suspended = list[int]() # suspend actions
         self.placed = list[int]() # place actions
 
@@ -114,7 +117,8 @@ class Record:
             'total rewards': self.total_rewards,
             'total served VMs': self.served_requests[-1],
             'total requests': self.total_requests[-1],
-            'total resource requested': np.round(self.total_resource_requested, 3),
+            'total cpu requested': np.round(self.total_cpu_requested, 3),
+            'total memory requested': np.round(self.total_memory_requested, 3),
             'total suspend actions': self.suspended[-1],
             'total place actions': self.placed[-1],
             'average VM life': np.round(np.mean(self.vm_lifetime),3),
@@ -125,9 +129,12 @@ class Record:
             'median slowdown': np.round(np.median(self.slowdown_rates), 3), 
             'max slowdown': np.round(np.max(self.slowdown_rates), 3),
             'drop rate': np.round(np.mean(self.drop_rate), 3),
-            'pm utilisation mean (second half)': np.round(np.mean(self.cpu[len(self.cpu)//2:]), 3),
-            'pm utilisation mean target (second half)': np.round(np.mean(self.target_util_mean[len(self.target_util_mean)//2:]), 3),
-            'pm utilisation std (second half)': np.round(np.std(self.cpu[len(self.cpu)//2:]), 3),
+            'cpu mean (second half)': np.round(np.mean(self.cpu[len(self.cpu)//2:]), 3),
+            'cpu mean target (second half)': np.round(np.mean(self.target_cpu_mean[len(self.target_cpu_mean)//2:]), 3),
+            'cpu std (second half)': np.round(np.std(self.cpu[len(self.cpu)//2:]), 3),
+            'memory mean (second half)': np.round(np.mean(self.memory[len(self.memory)//2:]), 3),
+            'memory mean target (second half)': np.round(np.mean(self.target_memory_mean[len(self.target_memory_mean)//2:]), 3),
+            'memory std (second half)': np.round(np.std(self.memory[len(self.memory)//2:]), 3),
         }
     
     def save(self, path: str):
@@ -142,6 +149,7 @@ class Record:
         record = cls(agent, jsondict['env_config'], jsondict['training_config']) 
 
         record.cpu = jsondict['cpu']
+        record.memory = jsondict['memory']
         if 'used_pm' in jsondict:
             record.used_pm = jsondict['used_pm']
         record.vm_placements = jsondict['vm_placements']
@@ -151,9 +159,11 @@ class Record:
         record.total_requests = jsondict['total_requests']
         record.dropped_requests = jsondict['dropped_requests']
         record.vm_arrival_steps = jsondict['vm_arrival_steps']
-        record.target_util_mean = jsondict['target_util_mean']
+        record.target_cpu_mean = jsondict['target_cpu_mean']
+        record.target_memory_mean = jsondict['target_memory_mean']
         record.served_requests = jsondict['served_requests']
-        record.total_resource_requested = jsondict['total_resource_requested']
+        record.total_cpu_requested = jsondict['total_cpu_requested']
+        record.total_memory_requested = jsondict['total_memory_requested']
         record.suspended = jsondict['suspended']
         if 'placed' in jsondict:
             record.placed = jsondict['placed']

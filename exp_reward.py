@@ -72,7 +72,7 @@ def evaluate_seeds(args):
         served_reqs.append(record.served_requests)
         total_served.append(record.served_requests[-1])
         cpu.append(record.cpu)
-        target_util.append(record.target_util_mean)
+        target_util.append(record.target_cpu_mean)
         drop_rates.append(record.drop_rate)
         suspended.append(record.suspended)
         total_suspended.append(record.suspended[-1])

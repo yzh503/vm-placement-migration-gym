@@ -11,7 +11,6 @@ class FirstFitAgent(Base):
     def __init__(self, env, config):
         super().__init__(type(self).__name__, env, config)
         
-    
     def learn(self):
         pass
 
@@ -22,17 +21,22 @@ class FirstFitAgent(Base):
         pass
 
     def act(self, observation):
-        obsdict = utils.convert_obs_to_dict(self.env.config.v_num, observation)
-        vm_placement = np.array(obsdict["vm_placement"])
-        cpu = np.array(obsdict["cpu"])
-        vm_resource = np.array(obsdict["vm_resource"])
-        action_vms = np.argwhere(vm_placement == -1)
-        action_vm = 0 if action_vms.size == 0 else int(action_vms[0])
-        action_pm = 0
+        observation = utils.convert_obs_to_dict(self.env.config.v_num, self.env.config.p_num, observation)
+        vm_placement = np.array(observation["vm_placement"], copy=True)
+        cpu = np.array(observation["cpu"], copy=True)
+        memory = np.array(observation["memory"], copy=True)
+        vm_cpu = np.array(observation["vm_cpu"])
+        vm_memory = np.array(observation["vm_memory"])
 
-        for p in range(len(cpu)): 
-            if cpu[p] + vm_resource[action_vm] <= 1: 
-                action_pm = p 
-                break
+        action = np.copy(vm_placement)
 
-        return utils.get_action(action_vm, action_pm, self.env.config.p_num)
+        for v in range(self.env.config.v_num):
+            if vm_placement[v] == -1: 
+                for p in range(len(cpu)): 
+                    if cpu[p] + vm_cpu[v] < 1 and memory[p] + vm_memory[v] < 1:
+                        action[v] = p # first status is waiting 
+                        cpu[p] += vm_cpu[v]
+                        break
+
+        action += 1 # first status is waiting
+        return action

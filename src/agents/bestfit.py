@@ -21,18 +21,25 @@ class BestFitAgent(Base):
         pass
 
     def act(self, observation):
-        obsdict = utils.convert_obs_to_dict(self.env.config.v_num, observation)
-        vm_placement = np.array(obsdict["vm_placement"])
-        cpu = np.array(obsdict["cpu"])
-        vm_resource = np.array(obsdict["vm_resource"])
-        action_vms = np.argwhere(vm_placement == -1)
-        action_vm = 0 if action_vms.size == 0 else int(action_vms[0])
-        action_pm = 0
+        observation = utils.convert_obs_to_dict(self.env.config.v_num, self.env.config.p_num, observation)
+        vm_placement = np.array(observation["vm_placement"], copy=True)
+        cpu = np.array(observation["cpu"], copy=True)
+        memory = np.array(observation["memory"], copy=True)
+        vm_cpu = np.array(observation["vm_cpu"])
+        vm_memory = np.array(observation["vm_memory"])
+        prod = np.multiply(cpu, memory)
 
-        for best_pm in np.flip(np.argsort(cpu)): 
-            if cpu[best_pm] + vm_resource[action_vm] <= 1: 
-                action_pm = int(best_pm)
-                cpu[action_pm] += vm_resource[action_vm]
-                break
- 
-        return utils.get_action(action_vm, action_pm, self.env.config.p_num)
+        action = np.copy(vm_placement)
+
+        for v in range(self.env.config.v_num):
+            if vm_placement[v] == -1: 
+                for best_pm in np.flip(np.argsort(prod)): 
+                    valid = cpu[best_pm] + vm_cpu[v] < 1 and memory[best_pm] + vm_memory[v] < 1
+                    if valid: 
+                        action[v] = best_pm # first status is waiting 
+                        cpu[best_pm] += vm_cpu[v]
+                        memory[best_pm] += vm_memory[v]
+                        break
+
+        action += 1 # first status is waiting
+        return action

@@ -51,7 +51,8 @@ class Base:
     
     def test(self, show: bool = False, output: str = None, debug: bool = False):
         
-        obs = self.env.reset()
+        self.env.eval()
+        obs, info = self.env.reset(seed=self.env.config.seed)
         done = False
 
         pbar = tqdm(total=self.env.config.eval_steps, leave=False)
@@ -66,12 +67,12 @@ class Base:
                     print('action: \t\t%d' % (action - 1))
                 else:
                     print('action: \t\t%s' % ((action - 1).flatten().tolist()))
-            obs, reward, done, info = self.env.step(action, eval_mode=True)
+            obs, reward, done, truncated, info = self.env.step(action)
             if debug: 
                 print('validity: \t\t%s' % (info['valid']))
                 print('reward: \t\t%.2f' % (reward))
                 print('')
-            self.record_testing_step(self.env.timestep, obs, reward, info)
+            self.record_testing_step(reward, info)
 
             pbar.update(1)
         pbar.close()
@@ -91,7 +92,8 @@ class Base:
             print(self.env.config)
             for k, v in summary.items():
                 print('%s: %.2f' % (k, v))
-            print('pm utilisation: %s' % (info['cpu']))
+            print('cpu: %s' % (info['cpu']))
+            print('memory: %s' % (info['memory']))
     
         fig, axs = plt.subplots(2, figsize=(6, 2))
         im = axs[0].imshow(np.transpose(np.array(self.record.cpu)), cmap='pink', interpolation='nearest', aspect='auto', vmin=0, vmax=1)
@@ -99,7 +101,7 @@ class Base:
         axs[0].set(xlabel="Time step")
         axs[0].set(ylabel="PM #")
         cbar = plt.colorbar(im)
-        cbar.set_label("PM Utilisation")
+        cbar.set_label("CPU Utilisation")
         axs[1].plot(self.record.used_pm)
         plt.tight_layout()
         if debug:
@@ -117,8 +119,9 @@ class Base:
         if self.writer:
             self.writer.close()
 
-    def record_testing_step(self, step: int, obs: np.ndarray, reward: float, info):
+    def record_testing_step(self, reward: float, info):
         self.record.cpu.append(info["cpu"])
+        self.record.memory.append(info["memory"])
         self.record.used_pm.append(len(info["cpu"]) - np.count_nonzero(info["cpu"]))
         self.record.vm_placements.append(info["vm_placement"])
         self.record.waiting_ratio.append(info['waiting_ratio'])
@@ -127,8 +130,10 @@ class Base:
         self.record.dropped_requests.append(info["dropped_requests"])
         self.record.total_requests.append(info["total_requests"])
         self.record.vm_arrival_steps = info["vm_arrival_steps"]
-        self.record.target_util_mean.append(info['target_util_mean'])
+        self.record.target_cpu_mean.append(info['target_cpu_mean'])
+        self.record.target_memory_mean.append(info['target_memory_mean'])
         self.record.served_requests.append(int(info['served_requests']))
-        self.record.total_resource_requested = info['total_resource_requested']
+        self.record.total_cpu_requested = info['total_cpu_requested']
+        self.record.total_memory_requested = info['total_memory_requested']
         self.record.suspended.append(info['suspend_actions'])
         self.record.placed.append(info['place_actions'])

@@ -1,14 +1,10 @@
 from dataclasses import dataclass
 from src.agents.bestfit import BestFitAgent, BestFitConfig
-from src.agents.bestfitmd import BestFitMDAgent, BestFitMDConfig
 from src.agents.ppo import PPOAgent, PPOConfig
-from src.agents.ppomd import PPOMDAgent
 from src.agents.firstfit import FirstFitAgent, FirstFitConfig
-from src.agents.firstfitmd import FirstFitMDAgent, FirstFitMDConfig
-from src.envs.env import VmEnv, EnvConfig
-from src.envs.mdenv import MultiDiscreteVmEnv
+from src.agents.bppo import BaselinePPOAgent, BaselinePPOConfig
+from src.vm_gym.envs.env import EnvConfig
 from src.agents.dqn import DQNAgent, DQNConfig
-from src.agents.random import RandomAgent, RandomConfig
 from src.record import Record
 import src.utils
 import random
@@ -16,6 +12,8 @@ import yaml, argparse
 import torch
 import os
 import numpy as np 
+import src.vm_gym
+import gymnasium as gym
 
 @dataclass
 class Args:
@@ -38,31 +36,25 @@ def run(args: Args) -> Record:
     else:
         training_config = {}
 
+    torch.set_default_dtype(torch.float64) 
     torch.manual_seed(env_config['seed'])
     random.seed(env_config['seed'])
     np.random.seed(env_config['seed'])
 
-    env = VmEnv(EnvConfig(**env_config))
-    env_md = MultiDiscreteVmEnv(EnvConfig(**env_config))
+    env = gym.make("VmEnv-v1", config=EnvConfig(**env_config))
 
-    if args.agent == "random": 
-        agent = RandomAgent(env, RandomConfig(**training_config))
-    elif args.agent == "dqn":
+    if args.agent == "dqn":
         agent = DQNAgent(env, DQNConfig(**training_config))
     elif args.agent == "ppo":
         agent = PPOAgent(env, PPOConfig(**training_config))
-    elif args.agent == "ppomd":
-        agent = PPOMDAgent(env_md, PPOConfig(**training_config))
+    elif args.agent == "bppo":
+        agent = BaselinePPOAgent(env, BaselinePPOConfig(**training_config))
     elif args.agent == "firstfit":
         agent = FirstFitAgent(env, FirstFitConfig(**training_config))
-    elif args.agent == "firstfitmd":
-        agent = FirstFitMDAgent(env_md, FirstFitMDConfig(**training_config))
     elif args.agent == "bestfit":
         agent = BestFitAgent(env, BestFitConfig(**training_config))
-    elif args.agent == "bestfitmd":
-        agent = BestFitMDAgent(env_md, BestFitMDConfig(**training_config))
     else: 
-        print(f"Agent cannot be {agent}")
+        print(f"Agent cannot be {args.agent}")
     
     if args.logdir and args.jobname:
         agent.set_log(jobname=args.jobname, logdir=args.logdir)

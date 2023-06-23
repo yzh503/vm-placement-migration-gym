@@ -11,10 +11,11 @@ import torch.optim as optim
 
 from tqdm import tqdm
 from collections import namedtuple, deque
+from src import utils
 
 from src.agents.base import Base
-from src.envs.env import VmEnv
-from src.envs.preprocess import PreprocessEnv
+from src.vm_gym.envs.env import VmEnv
+from src.vm_gym.envs.preprocess import PreprocessEnv
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -119,16 +120,16 @@ class DQNAgent(Base):
             self.env.random_seed() # get different sequence
             current_ep_reward = 0
             # Initialize the environment and state
-            previous_obs = self.env.reset()
+            previous_obs, info = self.env.reset(self.env.config.seed)
             done = False
 
             while not done:
                 # Select and perform an action
                 action = self._select_action(previous_obs)
-                obs, reward, done, info = self.env.step(action)
+                obs, reward, done, truncated, info = self.env.step(action)
                 reward = torch.tensor([reward], device=self.device)
                 self.memory.push(previous_obs, action, obs, reward)
-                previous_obs = obs
+                previous_obs, info = obs
                 current_ep_reward += reward.item()  # For logging
                 loss = self._optimize_model() # Perform one step of the optimization (on the policy network)
                 if self.writer and loss: 
