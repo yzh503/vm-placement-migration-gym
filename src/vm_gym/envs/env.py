@@ -45,7 +45,7 @@ class VmEnv(gym.Env):
     def __init__(self, config: EnvConfig):
         self.config = config
         self.eval_mode = False
-        self.observation_space = spaces.Box(low=-2, high=self.config.p_num, shape=(self.config.v_num * 4 + self.config.p_num * 2,), dtype=np.float64) 
+        self.observation_space = spaces.Box(low=-2, high=self.config.p_num, shape=(self.config.v_num * 4 + self.config.p_num * 2,)) 
         self.action_space = spaces.MultiDiscrete(np.full(self.config.v_num , self.config.p_num + 1))  # Every VM has (PMs + wait status) actions
         self.reset(self.config.seed)
 
@@ -296,7 +296,7 @@ class VmEnv(gym.Env):
             self.vm_arrival_steps[i].append(self.timestep + 1) # Arrival at next step
 
     def _get_obs(self):
-        return np.hstack([self.vm_placement, self.vm_remaining_runtime, self.vm_cpu, self.vm_memory, self.cpu, self.memory])
+        return np.hstack([self.vm_placement, self.vm_remaining_runtime, self.vm_cpu, self.vm_memory, self.cpu, self.memory]).astype(np.float32)
     
     def _get_info(self):
         return {

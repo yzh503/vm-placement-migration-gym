@@ -132,7 +132,7 @@ class MDModel(nn.Module):
             action = action.T
         logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0, dtype=torch.float64), entropy.sum(dim=0, dtype=torch.float64)
+        return action.T, logprob.sum(dim=0, dtype=torch.float32), entropy.sum(dim=0, dtype=torch.float32)
     
     def get_det_action(self, obs, action=None):
         logits = self.actor(self.shared_network(obs))
@@ -173,7 +173,7 @@ class MDSModel(nn.Module):
             action = action.T
         logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0, dtype=torch.float64), entropy.sum(dim=0, dtype=torch.float64)
+        return action.T, logprob.sum(dim=0, dtype=torch.float32), entropy.sum(dim=0, dtype=torch.float32)
     
     def get_det_action(self, obs, action=None):
         logits = self.actor(obs)
@@ -213,7 +213,7 @@ class MDSCModel(nn.Module):
 
         actions[actions < 0] = 0
         actions[actions > 0] = self.action_nvec[0] - 1
-        return actions.int(), probs.log_prob(actions).sum(dim=1, dtype=torch.float64), probs.entropy().sum(dim=1, dtype=torch.float64)
+        return actions.int(), probs.log_prob(actions).sum(dim=1, dtype=torch.float32), probs.entropy().sum(dim=1, dtype=torch.float32)
 
 class PPOAgent(Base):
     def __init__(self, env: VmEnv, config: PPOConfig):
