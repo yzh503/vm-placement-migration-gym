@@ -36,7 +36,6 @@ def run(args: Args) -> Record:
     else:
         training_config = {}
 
-    torch.set_default_dtype(torch.float64) 
     torch.manual_seed(env_config['seed'])
     random.seed(env_config['seed'])
     np.random.seed(env_config['seed'])
@@ -86,7 +85,7 @@ def run(args: Args) -> Record:
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-a", "--agent", required=True, choices=['random', 'dqn', 'ppo', 'ppomd', 'bestfit', 'bestfitmd', 'firstfit', 'firstfitmd', 'noaction'], help = "Choose an agent to train or evaluate. \"md\" indicates multi-discrete action space.")
+    parser.add_argument("-a", "--agent", required=True, choices=["dqn", "ppo", "firstfit", "bestfit", "bppo"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/reward1.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")

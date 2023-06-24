@@ -2,11 +2,9 @@ from dataclasses import dataclass
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-import src.utils as utils
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.kl import kl_divergence
 import torch
-from itertools import chain
 
 WAIT_STATUS = -1
 EMPTY_SLOT = -2
