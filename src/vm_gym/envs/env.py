@@ -50,7 +50,7 @@ class VmEnv(gym.Env):
         self.reset(self.config.seed)
 
     def _placement_valid(self, pm, vm):
-        return self.cpu[pm] + self.vm_cpu[vm] < 1 and self.memory[pm] + self.vm_memory[vm] < 1
+        return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
 
     def _free_pm(self, pm, vm):
         self.cpu[pm] -= self.vm_cpu[vm]
@@ -177,7 +177,6 @@ class VmEnv(gym.Env):
         self.rng2 = np.random.default_rng(seed+1)
         self.rng3 = np.random.default_rng(seed+2)
         self.rng4 = np.random.default_rng(seed+3)
-        self.rng5 = np.random.default_rng(seed+4)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -213,8 +212,8 @@ class VmEnv(gym.Env):
             self.vm_cpu_sequence = np.tile(np.concatenate((np.repeat(0.15, 6 * self.config.eval_steps // 100), np.repeat(0.34, 8 * self.config.eval_steps // 100), np.repeat(0.51, 6 * self.config.eval_steps // 100))), max_steps // 10).tolist()
             self.vm_memory_sequence = np.tile(np.concatenate((np.repeat(0.15, 6 * self.config.eval_steps // 100), np.repeat(0.34, 8 * self.config.eval_steps // 100), np.repeat(0.51, 6 * self.config.eval_steps // 100))), max_steps // 10).tolist()
         elif self.config.sequence == 'multinomial':
-            self.vm_cpu_sequence = self.rng4.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps+1, replace=True) # uniform discrete
-            self.vm_memory_sequence = self.rng5.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps+1, replace=True) # uniform discrete
+            self.vm_cpu_sequence = self.rng1.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps+1, replace=True) # uniform discrete
+            self.vm_memory_sequence = self.rng2.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps+1, replace=True) # uniform discrete
         elif self.config.sequence == 'uniform':
             self.vm_cpu_sequence = np.around(self.rng1.uniform(low=0.1, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.55
             self.vm_memory_sequence = np.around(self.rng2.uniform(low=0.1, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.55
@@ -235,8 +234,10 @@ class VmEnv(gym.Env):
         print(f"VM request: \t\t{np.count_nonzero(self.vm_placement == -1)}, dropped: {self.dropped_requests}")
         print(f"VM placement: \t\t{self.vm_placement}")
         print(f"VM suspended: \t\t{self.vm_suspended}")
-        print(f"VM CPU (%): \t{np.array(self.vm_cpu*100, dtype=int)} {np.round(np.sum(self.vm_cpu), 3)}")
-        print(f"CPU (%): \t{np.array(self.cpu*100, dtype=int)} {np.round(np.sum(self.cpu), 3)}")
+        print(f"CPU (%): \t\t{np.array(self.cpu*100, dtype=int)} {np.round(np.sum(self.cpu), 3)}")
+        print(f"Memory (%): \t\t{np.array(self.memory*100, dtype=int)} {np.round(np.sum(self.memory), 3)}")
+        print(f"VM CPU (%): \t\t{np.array(self.vm_cpu*100, dtype=int)} {np.round(np.sum(self.vm_cpu), 3)}")
+        print(f"VM Memory (%): \t\t{np.array(self.vm_memory*100, dtype=int)} {np.round(np.sum(self.vm_memory), 3)}")
         print(f"VM waiting time: \t{self.vm_waiting_time}")
         print(f"VM planned runtime: \t{self.vm_planned_runtime}")
         print(f"VM remaining runtime: \t{self.vm_remaining_runtime}")
@@ -264,6 +265,7 @@ class VmEnv(gym.Env):
                 self.memory[pm] -= self.vm_memory[vm]
 
             self.vm_cpu[vm_to_terminate] = 0
+            self.vm_memory[vm_to_terminate] = 0
             self.vm_planned_runtime[vm_to_terminate] = 0
             self.vm_waiting_time[vm_to_terminate] = 0
             self.vm_remaining_runtime[vm_to_terminate] = 0
@@ -289,7 +291,7 @@ class VmEnv(gym.Env):
         self.vm_memory_sequence = self.vm_memory_sequence[to_accept.size:]
         self.vm_memory[to_accept] = vm_memory_list
 
-        self.vm_planned_runtime[to_accept] =  self.rng2.poisson(self.config.service_rate, size=to_accept.size) + 1 
+        self.vm_planned_runtime[to_accept] =  self.rng4.poisson(self.config.service_rate, size=to_accept.size) + 1 
         self.vm_remaining_runtime[to_accept] = self.vm_planned_runtime[to_accept] # New request start counting
         self.dropped_requests += arrivals - placed_arrivals
         for i in to_accept: 
@@ -312,6 +314,8 @@ class VmEnv(gym.Env):
             "vm_placement": self.vm_placement.copy(), 
             "cpu": self.cpu.copy(),
             "memory": self.memory.copy(),
+            "vm_cpu": self.vm_cpu.copy(),
+            "vm_memory": self.vm_memory.copy(),
             "target_cpu_mean": self.target_cpu_mean,
             "target_memory_mean": self.target_memory_mean,
             'total_cpu_requested': self.total_cpu_requested,

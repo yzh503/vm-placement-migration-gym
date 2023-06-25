@@ -12,10 +12,10 @@ class RecurrentPPOAgent(Base):
             progress_bar=self.config.show_training_progress)
 
     def load_model(self, modelpath):
-        pass
+        self.model = RecurrentPPO.load(modelpath)
 
     def save_model(self, modelpath):
-        pass
+        self.model.save(modelpath)
 
     def act(self, observation):
         action, _ = self.model.predict(observation)

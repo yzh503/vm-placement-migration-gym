@@ -150,6 +150,8 @@ class Record:
 
         record.cpu = jsondict['cpu']
         record.memory = jsondict['memory']
+        record.vm_cpu = jsondict['vm_cpu']
+        record.vm_memory = jsondict['vm_memory']
         if 'used_pm' in jsondict:
             record.used_pm = jsondict['used_pm']
         record.vm_placements = jsondict['vm_placements']
