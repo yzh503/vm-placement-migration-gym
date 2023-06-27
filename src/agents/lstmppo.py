@@ -13,7 +13,7 @@ from collections import deque
 from torch.utils.data import BatchSampler, SubsetRandomSampler
 
 @dataclass
-class PPOConfig:
+class LSTMPPOConfig:
     n_episodes: int
     hidden_size_1: int
     hidden_size_2: int
@@ -30,8 +30,6 @@ class PPOConfig:
     max_grad_norm: float # Clip gradient
     batch_size: int
     minibatch_size: int
-    det_eval: bool
-    network_arch: str
     reward_scaling: bool
     show_training_progress: bool
 
@@ -52,8 +50,6 @@ class PPOConfig:
         self.max_grad_norm = float(self.max_grad_norm)
         self.batch_size = int(self.batch_size)
         self.minibatch_size = int(self.minibatch_size)
-        self.det_eval = bool(self.det_eval)
-        self.network_arch = str(self.network_arch)
         self.reward_scaling = bool(self.reward_scaling)
         self.show_training_progress = bool(self.show_training_progress)
 
@@ -109,24 +105,55 @@ def ortho_init(layer, scale=np.sqrt(2)):
     nn.init.constant_(layer.bias, 0)
     return layer
 
-class MlpShared(nn.Module): 
+class Lstm(nn.Module): 
     def __init__(self, obs_dim, action_space, hidden_size_1, hidden_size_2):
-        super(MlpShared, self).__init__()
+        super(Lstm, self).__init__()
         self.action_nvec = action_space.nvec
-        self.shared_network = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
-            nn.Tanh(),
-        )
-        self.actor = ortho_init(nn.Linear(hidden_size_1, self.action_nvec.sum()), scale=0.01)
-        self.critic = ortho_init(nn.Linear(hidden_size_1, 1), scale=1)
+        self.hidden_size_1 = hidden_size_1
+        self.hidden_size_2 = hidden_size_2
+        self.layers = 1
 
-    def get_value(self, obs):
-        return self.critic(self.shared_network(obs))
+        self.lstm_critic = nn.LSTM(input_size=obs_dim, hidden_size=hidden_size_1, num_layers=self.layers)
+        self.critic = ortho_init(nn.Linear(hidden_size_2, 1), scale=1)
 
-    def get_action(self, obs, action=None):
-        logits = self.actor(self.shared_network(obs))
+        self.lstm_actor = nn.LSTM(input_size=obs_dim, hidden_size=hidden_size_1, num_layers=self.layers)
+        self.actor = ortho_init(nn.Linear(hidden_size_2, self.action_nvec.sum()), scale=0.01)
+
+    def forward(self, obs, hidden_critic, hidden_actor):
+        lstm_out_critic, hidden_critic = self.lstm_critic(obs.view(len(obs), 1, -1), hidden_critic)
+        value = self.critic(lstm_out_critic.view(len(obs), -1))
+
+        lstm_out_actor, hidden_actor = self.lstm_actor(obs.view(len(obs), 1, -1), hidden_actor)
+        logits = self.actor(lstm_out_actor.view(len(obs), -1))
+        
+        return value, logits, hidden_critic, hidden_actor
+
+    def init_hidden(self, actor_batch_size, critic_batch_size):
+        weight = next(self.parameters()).data
+        hidden_actor = (weight.new(self.layers, actor_batch_size, self.hidden_size_1).zero_(),
+                weight.new(self.layers, actor_batch_size, self.hidden_size_1).zero_())
+        hidden_critic = (weight.new(self.layers, critic_batch_size, self.hidden_size_1).zero_(),
+                weight.new(self.layers, critic_batch_size, self.hidden_size_1).zero_())
+        return hidden_actor, hidden_critic
+
+    def get_value(self, obs, hidden_critic):
+        value_out = []
+        for i in range(obs.shape[0]):
+            obs_i = obs[i].unsqueeze(0) if obs.shape[0] > 1 else obs
+            lstm_out_critic, new_hidden_critic = self.lstm_critic(obs_i.view(1, obs_i.shape[0], obs_i.shape[1]), hidden_critic)
+            value_out.append(self.critic(lstm_out_critic.view(obs_i.shape[0], -1)))
+        values = torch.cat(value_out, dim=0)
+        self.hidden_critic = (new_hidden_critic[0].clone(), new_hidden_critic[1].clone())
+        return values, new_hidden_critic
+
+
+    def get_action(self, obs, hidden_actor, action=None):
+        logits_out = []
+        for i in range(obs.shape[0]):
+            obs_i = obs[i].unsqueeze(0) if obs.shape[0] > 1 else obs
+            lstm_out_actor, new_hidden_actor = self.lstm_actor(obs_i.view(1, obs_i.shape[0], obs_i.shape[1]), hidden_actor)
+            logits_out.append(self.actor(lstm_out_actor.view(obs_i.shape[0], -1)))
+        logits = torch.cat(logits_out, dim=0)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
@@ -135,114 +162,26 @@ class MlpShared(nn.Module):
             action = action.T
         logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0, dtype=torch.float32), entropy.sum(dim=0, dtype=torch.float32)
-    
-    def get_det_action(self, obs, action=None):
-        logits = self.actor(self.shared_network(obs))
-        split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
-        return torch.argmax(split_logits, dim=1)
+        return action.T, logprob.sum(dim=0), entropy.sum(dim=0), new_hidden_actor
 
-class MlpSeparate(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size_1, hidden_size_2):
-        super(MlpSeparate, self).__init__()
-        self.action_nvec = action_space.nvec
-        self.critic = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, 1), scale=1)
-        )
-        self.actor = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, self.action_nvec.sum()), scale=0.01)
-        )
-
-    def get_value(self, obs):
-        return self.critic(obs)
-
-    def get_action(self, obs, action=None):
-        logits = self.actor(obs)
-        split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
-        multi_dists = [Categorical(logits=logits) for logits in split_logits]
-        if action is None: 
-            action = torch.stack([dist.sample() for dist in multi_dists])
-        else: 
-            action = action.T
-        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
-        entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0, dtype=torch.float32), entropy.sum(dim=0, dtype=torch.float32)
-    
-    def get_det_action(self, obs, action=None):
-        logits = self.actor(obs)
-        split_logits = torch.reshape(logits, (self.action_nvec.size, self.action_nvec[0]))
-        return torch.argmax(split_logits, dim=1)
-
-class MlpCont(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size_1, hidden_size_2):
-        super(MlpCont, self).__init__()
-        self.action_nvec = action_space.nvec
-        self.critic = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, 1), scale=1)
-        )
-        self.actor_means = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, self.action_nvec.shape[0]), scale=0.01)
-        )
-        self.actor_logstds = nn.Parameter(torch.zeros(1, np.prod(self.action_nvec.shape[0])))
-
-    def get_value(self, obs):
-        return self.critic(obs)
-
-    def get_action(self, obs, actions=None):
-        action_means = self.actor_means(obs)
-        action_logstds = self.actor_logstds.expand_as(action_means)
-        action_stds = torch.exp(action_logstds)
-        probs = Normal(action_means, action_stds)
-        if actions is None:
-            actions = probs.sample()
-
-        actions[actions < 0] = 0
-        actions[actions > 0] = self.action_nvec[0] - 1
-        return actions.int(), probs.log_prob(actions).sum(dim=1, dtype=torch.float32), probs.entropy().sum(dim=1, dtype=torch.float32)
-
-class PPOAgent(Base):
-    def __init__(self, env: VmEnv, config: PPOConfig):
+class LSTMPPOAgent(Base):
+    def __init__(self, env: VmEnv, config: LSTMPPOConfig):
         super().__init__(type(self).__name__, env, config)
         self.init_model()
    
     def init_model(self):
         self.env = PreprocessEnv(self.env)
         self.obs_dim = self.env.observation_space.shape[0]
-        if self.config.network_arch == 'shared':
-            self.model = MlpShared(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2) 
-        elif self.config.network_arch == 'separate':
-            self.model = MlpSeparate(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2) 
-        elif self.config.network_arch == 'continuous':
-            self.model = MlpCont(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2)
-        else:
-            assert self.config.network_arch not in ['shared', 'separate', 'continuous']
+        self.model = Lstm(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2)
         self.model = torch.compile(self.model)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.lr, eps=1e-5)
+        self.hidden_actor = self.model.init_hidden(1, 1)[0]
 
 
     def act(self, obs):
-        if self.config.det_eval:
-            action = self.model.get_det_action(obs)
-            return action
-        else:
-            action, _, _ = self.model.get_action(obs)
-            return action
+        action, _, _, hidden_actor = self.model.get_action(obs, self.hidden_actor)
+        self.hidden_actor = hidden_actor
+        return action
 
     def save_model(self, modelpath):
         if modelpath: 
@@ -275,10 +214,11 @@ class PPOAgent(Base):
             current_ep_reward = 0
             obs, _ = self.env.reset(self.env.config.seed + i_episode)
             done = False
-            if self.model.__class__.__name__ == 'Lstm':
-                self.model.init_hidden(actor_batch_size=1, critic_batch_size=self.config.batch_size) # batch size is 1 for 
+
+            hidden_actor, hidden_critic = self.model.init_hidden(actor_batch_size=1, critic_batch_size=1) 
+            
             while not done:
-                action, logprob, _ = self.model.get_action(obs)
+                action, logprob, _, _ = self.model.get_action(obs, hidden_actor)
 
                 next_obs, reward, done, truncated, info = self.env.step(action)
                 self.total_steps += 1
@@ -297,7 +237,7 @@ class PPOAgent(Base):
                 batch_head += 1
 
                 if batch_head >= self.config.batch_size:
-                    self.update(action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
+                    hidden_actor, hidden_critic = self.update(action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch, hidden_actor, hidden_critic)
                     batch_head = 0
                     scheduler.step()
                 
@@ -313,7 +253,7 @@ class PPOAgent(Base):
             if i_episode > return_factor: 
                 pbar.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
 
-    def update(self, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch):
+    def update(self, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch, hidden_actor, hidden_critic):
 
         done_batch = done_batch.int()
 
@@ -322,8 +262,8 @@ class PPOAgent(Base):
         with torch.no_grad():      
             gae = 0     
             advantages = torch.zeros_like(rewards_batch)
-            values_batch = torch.flatten(self.model.get_value(obs_batch))
-            next_values = torch.flatten(self.model.get_value(next_obs_batch))
+            values_batch = torch.flatten(self.model.get_value(obs_batch, hidden_critic)[0])
+            next_values = torch.flatten(self.model.get_value(next_obs_batch, hidden_critic)[0])
             deltas = rewards_batch + (1 - done_batch) * self.config.gamma * next_values - values_batch
             for i in reversed(range(len(deltas))):
                 gae = deltas[i] + (1 - done_batch[i]) * self.config.gamma * self.config.lamda * gae 
@@ -343,7 +283,7 @@ class PPOAgent(Base):
                 adv_minibatch = advantages[minibatch]
                 adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10) # Adv normalisation
                 
-                _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action_batch[minibatch]) # 
+                _, newlogprob, entropy, new_hidden_actor = self.model.get_action(obs_batch[minibatch], hidden_actor, action_batch[minibatch]) # 
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
                 assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 9e-4), str(bi) + str(log_ratios) # newlogprob == logprob_batch in epoch 1 minibatch 1
@@ -355,17 +295,24 @@ class PPOAgent(Base):
                 surr_clipped = -torch.clamp(ratios, 1 - self.config.eps_clip, 1 + self.config.eps_clip) * adv_minibatch
                 loss_clipped = torch.max(surr, surr_clipped).mean()
 
-                newvalues = self.model.get_value(obs_batch[minibatch])
+                newvalues, new_hidden_critic = self.model.get_value(obs_batch[minibatch], hidden_critic)
+
+                if (minibatch == len(minibatches) - 1):
+                    hidden_actor = new_hidden_actor
+                    hidden_critic = new_hidden_critic
+
                 loss_vf_unclipped = torch.square(newvalues - returns[minibatch])
                 v_clipped = values_batch[minibatch] + torch.clamp(newvalues - values_batch[minibatch], -self.config.eps_clip, self.config.eps_clip)
                 loss_vf_clipped = torch.square(v_clipped - returns[minibatch])
                 loss_vf_max = torch.max(loss_vf_unclipped, loss_vf_clipped)
 
                 if (self.config.vf_loss_clip):
-                    loss_vf = 0.5 * loss_vf_max.mean() 
+                    loss_vf = 0.5 * loss_vf_max.mean()
                 else:
                     loss_vf = 0.5 * loss_vf_unclipped.mean() 
     
+                loss = loss_clipped - self.config.ent_coef * entropy.mean() + self.config.vf_coef * loss_vf # maximise equation (9) from the original PPO paper
+
                 loss = loss_clipped - self.config.ent_coef * entropy.mean() + self.config.vf_coef * loss_vf # maximise equation (9) from the original PPO paper
 
                 self.optimizer.zero_grad(set_to_none=True)
@@ -380,3 +327,5 @@ class PPOAgent(Base):
             self.writer.add_scalar('Training/loss', loss.item(), self.total_steps)
             self.writer.add_scalar('Training/kl', -log_ratios.mean().item(), self.total_steps)
             self.writer.add_scalar('Training/clipfracs', np.mean(clipfracs), self.total_steps)
+        
+        return hidden_actor, hidden_critic
