@@ -12,9 +12,9 @@ EMPTY_SLOT = -2
 @dataclass
 class EnvConfig(object):
     arrival_rate: float
-    service_rate: float
-    p_num: int
-    v_num: int
+    service_length: float
+    pms: int
+    vms: int
     var: float # std deviation of normal in KL divergence 
     training_steps: int
     eval_steps: int
@@ -26,9 +26,9 @@ class EnvConfig(object):
 
     def __post_init__(self):
         self.arrival_rate = float(self.arrival_rate)
-        self.service_rate = float(self.service_rate)
-        self.p_num = int(self.p_num)
-        self.v_num = int(self. v_num)
+        self.service_length = float(self.service_length)
+        self.pms = int(self.pms)
+        self.vms = int(self. vms)
         self.var = float(self.var)
         self.training_steps = int(self.training_steps)
         self.eval_steps = int(self.eval_steps)
@@ -45,8 +45,8 @@ class VmEnv(gym.Env):
     def __init__(self, config: EnvConfig):
         self.config = config
         self.eval_mode = False
-        self.observation_space = spaces.Box(low=-2, high=self.config.p_num, shape=(self.config.v_num * 3 + self.config.p_num * 2,)) 
-        self.action_space = spaces.MultiDiscrete(np.full(self.config.v_num , self.config.p_num + 1))  # Every VM has (PMs + wait status) actions
+        self.observation_space = spaces.Box(low=-2, high=self.config.pms, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
+        self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.config.pms + 1))  # Every VM has (PMs + wait status) actions
         self.reset(self.config.seed)
 
     def _placement_valid(self, pm, vm):
@@ -127,9 +127,9 @@ class VmEnv(gym.Env):
         
         vms_arrived = np.count_nonzero(self.vm_placement > EMPTY_SLOT)
         self.waiting_ratio = np.count_nonzero(self.vm_placement == WAIT_STATUS) / vms_arrived if vms_arrived > 0 else 0
-        self.used_pm_ratio = np.count_nonzero(self.cpu > 0) / self.config.p_num
-        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement != EMPTY_SLOT]) / self.config.p_num
-        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement != EMPTY_SLOT]) / self.config.p_num
+        self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms
+        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement != EMPTY_SLOT]) / self.config.pms
+        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement != EMPTY_SLOT]) / self.config.pms
 
         if self.config.cap_target_util and self.target_cpu_mean > 1: 
             self.target_cpu_mean = 1.0
@@ -187,14 +187,14 @@ class VmEnv(gym.Env):
         super().reset(seed=seed)
         self.random_seed(seed)
         # Observable
-        self.vm_placement = np.full(self.config.v_num, EMPTY_SLOT) # -1 is a VM request. -2 is an empty slot. 0... are PM indices. 
-        self.vm_cpu = np.zeros(self.config.v_num) 
-        self.vm_memory = np.zeros(self.config.v_num)
-        self.cpu = np.zeros(self.config.p_num)
-        self.memory = np.zeros(self.config.p_num)
-        self.vm_remaining_runtime = np.zeros(self.config.v_num, dtype=int)
-        self.waiting_ratio = np.zeros(self.config.v_num)
-        self.used_pm_ratio = np.zeros(self.config.v_num)
+        self.vm_placement = np.full(self.config.vms, EMPTY_SLOT) # -1 is a VM request. -2 is an empty slot. 0... are PM indices. 
+        self.vm_cpu = np.zeros(self.config.vms) 
+        self.vm_memory = np.zeros(self.config.vms)
+        self.cpu = np.zeros(self.config.pms)
+        self.memory = np.zeros(self.config.pms)
+        self.vm_remaining_runtime = np.zeros(self.config.vms, dtype=int)
+        self.waiting_ratio = np.zeros(self.config.vms)
+        self.used_cpu_ratio = np.zeros(self.config.vms)
         self.target_cpu_mean = 0
         self.target_memory_mean = 0
         # Not in observation
@@ -204,10 +204,10 @@ class VmEnv(gym.Env):
         self.suspend_action = 0
         self.place_action = 0
         self.dropped_requests = 0
-        self.vm_planned_runtime = np.zeros(self.config.v_num, dtype=int)
-        self.vm_waiting_time = np.zeros(self.config.v_num, dtype=int)
-        self.vm_suspended = np.zeros(self.config.v_num, dtype=int)
-        self.vm_arrival_steps = [[] for _ in range(self.config.v_num)] # Make sure the inner arrays are not references to the same array
+        self.vm_planned_runtime = np.zeros(self.config.vms, dtype=int)
+        self.vm_waiting_time = np.zeros(self.config.vms, dtype=int)
+        self.vm_suspended = np.zeros(self.config.vms, dtype=int)
+        self.vm_arrival_steps = [[] for _ in range(self.config.vms)] # Make sure the inner arrays are not references to the same array
         self.target_mean = []
         self.total_cpu_requested = 0
         self.total_memory_requested = 0
@@ -296,7 +296,7 @@ class VmEnv(gym.Env):
         self.vm_memory_sequence = self.vm_memory_sequence[to_accept.size:]
         self.vm_memory[to_accept] = vm_memory_list
 
-        self.vm_planned_runtime[to_accept] =  self.rng4.poisson(self.config.service_rate, size=to_accept.size) + 1 
+        self.vm_planned_runtime[to_accept] =  self.rng4.poisson(self.config.service_length, size=to_accept.size) + 1 
         self.vm_remaining_runtime[to_accept] = self.vm_planned_runtime[to_accept] # New request start counting
         self.dropped_requests += arrivals - placed_arrivals
         for i in to_accept: 
@@ -308,7 +308,7 @@ class VmEnv(gym.Env):
     def _get_info(self):
         return {
             "waiting_ratio": self.waiting_ratio, 
-            "used_pm_ratio": self.used_pm_ratio,
+            "used_cpu_ratio": self.used_cpu_ratio,
             "served_requests": self.served_requests,
             'suspend_actions': self.suspend_action,
             'place_actions': self.place_action,

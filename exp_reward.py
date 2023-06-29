@@ -6,33 +6,25 @@ from os.path import exists
 import copy
 import main 
 from src.record import Record
-from exp_config import cores, multiruns, episodes
+import exp
 
 def evaluate_seeds(args):
 
-    agent, weightspath, seq, r, load, sr, p_num, tsteps = args
-    configfile = open('config/reward1.yml')
+    agent, weightspath, rewardfn = args
+    configfile = open('config/r2.yml')
     config = yaml.safe_load(configfile)
-
-    config['environment']['p_num'] = p_num
-    config['environment']['v_num'] = p_num * 3
-    config['environment']['sequence'] = seq
-    config['environment']['reward_function'] = r
-    config['environment']['service_rate'] = sr
-    config['environment']['eval_steps'] = tsteps
-
-    if seq == 'uniform':
-        config['environment']['arrival_rate'] = config['environment']['p_num']/0.55/config['environment']['service_rate'] * load
-    elif seq == 'multinomial':
-        config['environment']['arrival_rate'] = config['environment']['p_num']/0.5/config['environment']['service_rate'] * load
-    else:
-        config['environment']['arrival_rate'] = config['environment']['p_num']/0.33/config['environment']['service_rate'] * load
-    config['environment']['arrival_rate'] = np.round(config['environment']['arrival_rate'], 3)
+    config['environment']['pms'] = exp.pms
+    config['environment']['vms'] = exp.vms
+    config['environment']['eval_steps'] = exp.episodes
+    config['environment']['reward_function'] = "utilisation"
+    config['environment']['service_length'] = exp.service_length
+    config['environment']['sequence'] = "uniform"
+    config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
     
     args = []
     records = []
-    for seed in np.arange(0, multiruns): 
-        recordname = f'data/exp_reward/{sr}/{r}-{seed}.json'     
+    for seed in np.arange(0, exp.multiruns): 
+        recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
         if exists(recordname):
             print(f"{recordname} exists")
             f = open(recordname, 'r')
@@ -57,14 +49,14 @@ def evaluate_seeds(args):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(cores) as pool: 
+        with Pool(exp.cores) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
-                recordname = f'data/exp_reward/{sr}/{r}-{seed}.json'     
+                recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
                 record.save(recordname)
                 records.append(record)
 
-    returns, served_reqs, cpu, target_util, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
+    returns, served_reqs, cpu, memory, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
     total_suspended = []
     total_served = []
     for record in records:
@@ -72,7 +64,7 @@ def evaluate_seeds(args):
         served_reqs.append(record.served_requests)
         total_served.append(record.served_requests[-1])
         cpu.append(record.cpu)
-        target_util.append(record.target_cpu_mean)
+        memory.append(record.memory)
         drop_rates.append(record.drop_rate)
         suspended.append(record.suspended)
         total_suspended.append(record.suspended[-1])
@@ -82,25 +74,25 @@ def evaluate_seeds(args):
   
     returns = np.array(returns)
     cpu = np.array(cpu) # dim 0: multiple tests, dim 1: testing steps, dim 2: pms 
-    target_util = np.array(target_util)
+    memory = np.array(memory)
     served_reqs = np.mean(served_reqs, axis=0)
     drop_rates = np.mean(drop_rates, axis=0)
-    pm_mean_multitests = np.mean(cpu, axis=2)
-    pm_var_multitests = np.var(cpu, axis=2)
-    pm_var = np.mean(pm_var_multitests, axis=0)
+    cpu_mean_multitests = np.mean(cpu, axis=2)
+    cpu_var_multitests = np.var(cpu, axis=2)
+    cpu_var = np.mean(cpu_var_multitests, axis=0)
+    memory_mean_multitests = np.mean(memory, axis=2)
+    memory_var_multitests = np.var(memory, axis=2)
+    memory_var = np.mean(memory_var_multitests, axis=0)
     
     to_print = '%s,' % (agent) 
-    to_print += '%s,' % (r)
-    to_print += '%.2f,' % (load) 
-    to_print += '%d,' % (sr) 
-    to_print += '%d,' % (p_num) 
     to_print += '%.3f,' % (np.mean(returns))
     to_print += '%.3f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
     to_print += '%d,' % (np.mean(total_suspended))
-    to_print += '%.3f,' % (np.mean(pm_mean_multitests))
-    to_print += '%.3f,' % (np.mean(np.mean(target_util, axis=1)))
-    to_print += '%.3f,' % (np.mean(pm_var))
+    to_print += '%.3f,' % (np.mean(cpu_mean_multitests))
+    to_print += '%.3f,' % (np.mean(cpu_var))
+    to_print += '%.3f,' % (np.mean(memory_mean_multitests))
+    to_print += '%.3f,' % (np.mean(memory_var))
     to_print += '%.3f,' % (np.mean(pending_rates))
     to_print += '%.3f,' % (np.mean(waiting_ratios))
     to_print += '%.3f\n' % (np.mean(slowdown_rates))
@@ -110,14 +102,11 @@ def evaluate_seeds(args):
 if __name__ == '__main__':
 
     print("Evaluating Reward Functions...")
-    
-    seq, r, tsteps = 'uniform', 1, episodes
-    to_print = 'Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Pending Rate, Waiting Ratio, Slowdown Rate\n'
-    
-    load, sr, p_num = 1, 1000, 10
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r1.pt', seq, 1, load, sr, p_num, tsteps))
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r2.pt', seq, 2, load, sr, p_num, tsteps))
-    to_print += evaluate_seeds(('ppomd', 'weights/ppomd-r3.pt', seq, 3, load, sr, p_num, tsteps))
+
+    to_print = 'Agent, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
+    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r1.pt', "kl"))
+    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r2.pt', "utilisation"))
+    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r3.pt', "waiting_ratio"))
 
     file = open('data/exp_reward/summary.csv', 'w')
     file.write(to_print)

@@ -1,0 +1,23 @@
+environment:  
+  pms: 10
+  vms: 30
+  var: 0.01
+  service_length: 100
+  arrival_rate: 0.182 # 100% system load: pms / distribution expectation / service rate 
+  training_steps: 500
+  eval_steps: 100000
+  seed: 0
+  reward_function: utilisation
+  cap_target_util: true
+  sequence: "uniform"
+  beta: 0.5
+agents: 
+  ppo: 
+      episodes: 2000
+      device: cpu 
+  ppolstm: 
+      episodes: 2000 
+      device: cpu
+  dqn: 
+      episodes: 2000
+      device: cpu

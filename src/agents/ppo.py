@@ -9,53 +9,29 @@ from src.vm_gym.envs.preprocess import PreprocessEnv
 from torch.optim import lr_scheduler
 from src.agents.base import Base
 from dataclasses import dataclass
-from collections import deque
-from torch.utils.data import BatchSampler, SubsetRandomSampler
-
+from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSampler
 @dataclass
 class PPOConfig:
-    n_episodes: int
-    hidden_size_1: int
-    hidden_size_2: int
-    lr: float
-    lr_lambda: float
-    gamma: float # GAE parameter
-    lamda: float # GAE parameter
-    ent_coef: float # Entropy coefficient
-    vf_coef: float # Value function coefficient
-    vf_loss_clip: bool
-    k_epochs: int
-    kl_max: float
-    eps_clip: float
-    max_grad_norm: float # Clip gradient
-    batch_size: int
-    minibatch_size: int
-    det_eval: bool
-    network_arch: str
-    reward_scaling: bool
-    show_training_progress: bool
-
-    def __post_init__(self):
-        self.n_episodes = int(self.n_episodes)
-        self.hidden_size_1 = int(self.hidden_size_1)
-        self.hidden_size_2 = int(self.hidden_size_2)
-        self.lr = float(self.lr)
-        self.lr_lambda = float(self.lr_lambda)
-        self.gamma = float(self.gamma)
-        self.lamda = float(self.lamda)
-        self.ent_coef = float(self.ent_coef)
-        self.vf_coef = float(self.vf_coef)
-        self.vf_loss_clip = bool(self.vf_loss_clip)
-        self.k_epochs = int(self.k_epochs)
-        self.kl_max = float(self.kl_max)
-        self.eps_clip = float(self.eps_clip)
-        self.max_grad_norm = float(self.max_grad_norm)
-        self.batch_size = int(self.batch_size)
-        self.minibatch_size = int(self.minibatch_size)
-        self.det_eval = bool(self.det_eval)
-        self.network_arch = str(self.network_arch)
-        self.reward_scaling = bool(self.reward_scaling)
-        self.show_training_progress = bool(self.show_training_progress)
+    episodes: int = 2000
+    hidden_size: int = 256
+    lr: float = 3e-5
+    lr_lambda: float = 1
+    gamma: float = 0.99 # GAE parameter
+    lamda: float = 0.98 # GAE parameter
+    ent_coef: float = 0.01 # Entropy coefficient
+    vf_coef: float = 0.5 # Value function coefficient
+    vf_loss_clip: bool = True
+    k_epochs: int = 4
+    kl_max: float = 0.02
+    eps_clip: float = 0.1
+    max_grad_norm: float = 0.5 # Clip gradient
+    batch_size: int = 100
+    minibatch_size: int = 25    
+    det: bool = False # Determinisitc action for evaludation
+    network_arch: str = "separate"
+    reward_scaling: bool = False
+    training_progress_bar: bool = True
+    device: str = "cpu"
 
 class RunningMeanStd:
     # https://github.com/Lizhi-sjtu/DRL-code-pytorch/blob/69019cf9b1624db3871d4ed46e29389aadfdcb02/4.PPO-discrete/normalization.py
@@ -110,17 +86,17 @@ def ortho_init(layer, scale=np.sqrt(2)):
     return layer
 
 class MlpShared(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size_1, hidden_size_2):
+    def __init__(self, obs_dim, action_space, hidden_size):
         super(MlpShared, self).__init__()
         self.action_nvec = action_space.nvec
         self.shared_network = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
+            ortho_init(nn.Linear(obs_dim, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
+            ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
         )
-        self.actor = ortho_init(nn.Linear(hidden_size_1, self.action_nvec.sum()), scale=0.01)
-        self.critic = ortho_init(nn.Linear(hidden_size_1, 1), scale=1)
+        self.actor = ortho_init(nn.Linear(hidden_size, self.action_nvec.sum()), scale=0.01)
+        self.critic = ortho_init(nn.Linear(hidden_size, 1), scale=1)
 
     def get_value(self, obs):
         return self.critic(self.shared_network(obs))
@@ -135,7 +111,7 @@ class MlpShared(nn.Module):
             action = action.T
         logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0, dtype=torch.float32), entropy.sum(dim=0, dtype=torch.float32)
+        return action.T, logprob.sum(dim=0), entropy.sum(dim=0)
     
     def get_det_action(self, obs, action=None):
         logits = self.actor(self.shared_network(obs))
@@ -143,22 +119,22 @@ class MlpShared(nn.Module):
         return torch.argmax(split_logits, dim=1)
 
 class MlpSeparate(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size_1, hidden_size_2):
+    def __init__(self, obs_dim, action_space, hidden_size):
         super(MlpSeparate, self).__init__()
         self.action_nvec = action_space.nvec
         self.critic = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
+            ortho_init(nn.Linear(obs_dim, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
+            ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, 1), scale=1)
+            ortho_init(nn.Linear(hidden_size, 1), scale=1)
         )
         self.actor = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
+            ortho_init(nn.Linear(obs_dim, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
+            ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, self.action_nvec.sum()), scale=0.01)
+            ortho_init(nn.Linear(hidden_size, self.action_nvec.sum()), scale=0.01)
         )
 
     def get_value(self, obs):
@@ -174,7 +150,7 @@ class MlpSeparate(nn.Module):
             action = action.T
         logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0, dtype=torch.float32), entropy.sum(dim=0, dtype=torch.float32)
+        return action.T, logprob.sum(dim=0), entropy.sum(dim=0)
     
     def get_det_action(self, obs, action=None):
         logits = self.actor(obs)
@@ -182,22 +158,22 @@ class MlpSeparate(nn.Module):
         return torch.argmax(split_logits, dim=1)
 
 class MlpCont(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size_1, hidden_size_2):
+    def __init__(self, obs_dim, action_space, hidden_size):
         super(MlpCont, self).__init__()
         self.action_nvec = action_space.nvec
         self.critic = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
+            ortho_init(nn.Linear(obs_dim, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
+            ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, 1), scale=1)
+            ortho_init(nn.Linear(hidden_size, 1), scale=1)
         )
         self.actor_means = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size_1)),
+            ortho_init(nn.Linear(obs_dim, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, hidden_size_2)),
+            ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size_1, self.action_nvec.shape[0]), scale=0.01)
+            ortho_init(nn.Linear(hidden_size, self.action_nvec.shape[0]), scale=0.01)
         )
         self.actor_logstds = nn.Parameter(torch.zeros(1, np.prod(self.action_nvec.shape[0])))
 
@@ -214,7 +190,7 @@ class MlpCont(nn.Module):
 
         actions[actions < 0] = 0
         actions[actions > 0] = self.action_nvec[0] - 1
-        return actions.int(), probs.log_prob(actions).sum(dim=1, dtype=torch.float32), probs.entropy().sum(dim=1, dtype=torch.float32)
+        return actions.int(), probs.log_prob(actions).sum(dim=1), probs.entropy().sum(dim=1)
 
 class PPOAgent(Base):
     def __init__(self, env: VmEnv, config: PPOConfig):
@@ -225,19 +201,19 @@ class PPOAgent(Base):
         self.env = PreprocessEnv(self.env)
         self.obs_dim = self.env.observation_space.shape[0]
         if self.config.network_arch == 'shared':
-            self.model = MlpShared(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2) 
+            self.model = MlpShared(self.obs_dim, self.env.action_space, self.config.hidden_size)
         elif self.config.network_arch == 'separate':
-            self.model = MlpSeparate(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2) 
+            self.model = MlpSeparate(self.obs_dim, self.env.action_space, self.config.hidden_size) 
         elif self.config.network_arch == 'continuous':
-            self.model = MlpCont(self.obs_dim, self.env.action_space, self.config.hidden_size_1, self.config.hidden_size_2)
+            self.model = MlpCont(self.obs_dim, self.env.action_space, self.config.hidden_size)
         else:
             assert self.config.network_arch not in ['shared', 'separate', 'continuous']
-        self.model = torch.compile(self.model)
+        self.model = torch.compile(self.model).to(self.config.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.lr, eps=1e-5)
 
 
     def act(self, obs):
-        if self.config.det_eval:
+        if self.config.det:
             action = self.model.get_det_action(obs)
             return action
         else:
@@ -253,56 +229,49 @@ class PPOAgent(Base):
         self.model.eval()
 
     def learn(self):
-        ep_returns = np.zeros(self.config.n_episodes)
-        pbar = tqdm(range(int(self.config.n_episodes)), disable=not bool(self.config.show_training_progress))
-        return_factor = int(self.config.n_episodes*0.01 if self.config.n_episodes >= 100 else 1)
+        ep_returns = np.zeros(self.config.episodes)
+        pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar))
+        return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
 
-        action_batch = torch.zeros((self.config.batch_size,self.env.action_space.nvec.size))
-        obs_batch = torch.zeros(self.config.batch_size, self.obs_dim)
-        next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim)
-        logprob_batch = torch.zeros(self.config.batch_size)
-        rewards_batch = torch.zeros(self.config.batch_size)
-        done_batch = torch.zeros(self.config.batch_size)
-        batch_head = 0
+        action_batch = torch.zeros((self.config.batch_size,self.env.action_space.nvec.size), dtype=int, device=self.config.device)
+        obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, device=self.config.device)
+        next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, device=self.config.device)
+        logprob_batch = torch.zeros(self.config.batch_size, device=self.config.device)
+        rewards_batch = torch.zeros(self.config.batch_size, device=self.config.device)
+        done_batch = torch.zeros(self.config.batch_size, dtype=int, device=self.config.device)
+        i_batch = 0
+
     
         # obs_normalizer = ObsNormalizer(shape=self.obs_dim) # Observation normalization 
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
 
-        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) #StepLR(self.optimizer, step_size=self.config.n_episodes // 100, gamma=0.95)
+        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) #StepLR(self.optimizer, step_size=self.config.episodes // 100, gamma=0.95)
 
         for i_episode in pbar:
             current_ep_reward = 0
             obs, _ = self.env.reset(self.env.config.seed + i_episode)
             done = False
-            if self.model.__class__.__name__ == 'Lstm':
-                self.model.init_hidden(actor_batch_size=1, critic_batch_size=self.config.batch_size) # batch size is 1 for 
             while not done:
-                action, logprob, _ = self.model.get_action(obs)
+                action, logprob, _ = self.model.get_action(obs.to(self.config.device))
+                next_obs, reward, done, truncated, info = self.env.step(action.cpu())
+                reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
 
-                next_obs, reward, done, truncated, info = self.env.step(action)
-                self.total_steps += 1
-                
-                if self.config.reward_scaling:
-                    reward_t = reward_scaler.scale(reward)[0]
-                else: 
-                    reward_t = reward
+                action_batch[i_batch] = torch.flatten(action)
+                obs_batch[i_batch] = torch.flatten(obs.to(self.config.device))
+                next_obs_batch[i_batch] = torch.flatten(next_obs.to(self.config.device))
+                logprob_batch[i_batch] = logprob.item()
+                rewards_batch[i_batch] = reward_t
+                done_batch[i_batch] = done
+                i_batch += 1
 
-                action_batch[batch_head] = torch.flatten(action)
-                obs_batch[batch_head] = torch.flatten(obs)
-                next_obs_batch[batch_head] = torch.flatten(next_obs)
-                logprob_batch[batch_head] = logprob.item()
-                rewards_batch[batch_head] = reward_t
-                done_batch[batch_head] = done
-                batch_head += 1
-
-                if batch_head >= self.config.batch_size:
+                if i_batch >= self.config.batch_size:
                     self.update(action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
-                    batch_head = 0
                     scheduler.step()
+                    i_batch = 0
                 
                 obs = next_obs
-
+                self.total_steps += 1
                 current_ep_reward += reward  # For logging
 
             ep_returns[i_episode] = current_ep_reward
@@ -315,10 +284,7 @@ class PPOAgent(Base):
 
     def update(self, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch):
 
-        done_batch = done_batch.int()
-
         # GAE advantages         
-        
         with torch.no_grad():      
             gae = 0     
             advantages = torch.zeros_like(rewards_batch)
@@ -338,15 +304,16 @@ class PPOAgent(Base):
                 SubsetRandomSampler(range(self.config.batch_size)), 
                 batch_size=self.config.minibatch_size, 
                 drop_last=False)
+            sequential_sampler = SequentialSampler(range(self.config.batch_size))
+            minibatches = BatchSampler(sequential_sampler, batch_size=self.config.minibatch_size, drop_last=False)
             
             for bi, minibatch in enumerate(minibatches):
                 adv_minibatch = advantages[minibatch]
                 adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10) # Adv normalisation
-                
-                _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action_batch[minibatch]) # 
+                _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action_batch[minibatch])
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
-                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 9e-4), str(bi) + str(log_ratios) # newlogprob == logprob_batch in epoch 1 minibatch 1
+                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 2e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())

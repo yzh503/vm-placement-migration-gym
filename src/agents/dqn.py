@@ -36,14 +36,14 @@ class ReplayMemory(object):
 
 class DQN(nn.Module):
 
-    def __init__(self, obs_dims, n_action, hidden_size_1, hidden_size_2):
+    def __init__(self, obs_dims, n_action, hidden_size):
         super(DQN, self).__init__()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(obs_dims, hidden_size_1),
+            nn.Linear(obs_dims, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size_1, hidden_size_2),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size_2, n_action),
+            nn.Linear(hidden_size, n_action),
         )
 
     def forward(self, x):
@@ -55,51 +55,37 @@ class DQN(nn.Module):
 
 @dataclass
 class DQNConfig(object):
-    n_episodes: int
-    batch_size: int
-    memory_size: int
-    gamma: float
-    eps_start: float
-    eps_end: float
-    eps_decay: int
-    target_update: int
-    show_training_progress: bool
-    hidden_size_1: int
-    hidden_size_2: int
-    learning_rate: float
-
-    def __post_init__(self):
-        self.n_episodes = int(self.n_episodes)
-        self.batch_size = int(self.batch_size)
-        self.memory_size = int(self.memory_size)
-        self.gamma = float(self.gamma)
-        self.eps_start = float(self.eps_start)
-        self.eps_end = float(self.eps_end)
-        self.eps_decay = int(self.eps_decay)
-        self.target_update = int(self.target_update)
-        self.show_training_progress = bool(self.show_training_progress)
-        self.hidden_size_1 = int(self.hidden_size_1)
-        self.hidden_size_2 = int(self.hidden_size_2)
-        self.learning_rate = float(self.learning_rate)
+    episodes: int = 2000
+    batch_size: int = 100
+    memory_size: int = 10000
+    gamma: float = 0.99
+    eps_start: float = 1
+    eps_end: float = 0.1
+    eps_decay: int = 400
+    target_update: int = 40
+    training_progress_bar: bool = True
+    hidden_size: int = 256
+    lr: float = 1e-4
+    device: str = "cpu"
 
 class DQNAgent(Base):
 
     def __init__(self, env: VmEnv, config: DQNConfig):
         super().__init__(type(self).__name__, env, config)
         self.env = PreprocessEnv(self.env)
-        self.device = torch.device("cpu")
+        self.device = self.config.device
         
         obs_dims = self.env.observation_space.shape[0]
         n_actions = self.env.action_space.n
 
-        self.policy_net = DQN(obs_dims, n_actions, self.config.hidden_size_1, self.config.hidden_size_2).to(self.device)
+        self.policy_net = DQN(obs_dims, n_actions, self.config.hidden_size).to(self.device)
         self.policy_net = torch.compile(self.policy_net)
-        self.target_net = DQN(obs_dims, n_actions, self.config.hidden_size_1, self.config.hidden_size_2).to(self.device)
+        self.target_net = DQN(obs_dims, n_actions, self.config.hidden_size).to(self.device)
         self.target_net = torch.compile(self.target_net)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.config.learning_rate)#optim.SGD(self.policy_net.parameters(), momentum=0.9, lr=self.config.learning_rate) # optim.RMSprop(self.policy_net.parameters()) # Alternative: 
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.config.lr)#optim.SGD(self.policy_net.parameters(), momentum=0.9, lr=self.config.lr) # optim.RMSprop(self.policy_net.parameters()) # Alternative: 
         self.memory = ReplayMemory(self.config.memory_size)
         self.steps_done = 0
     
@@ -112,9 +98,9 @@ class DQNAgent(Base):
         self.policy_net.eval()
 
     def learn(self):
-        ep_returns = np.zeros(self.config.n_episodes)
-        pbar = tqdm(range(int(self.config.n_episodes)), disable=not bool(self.config.show_training_progress))
-        return_factor = int(self.config.n_episodes*0.01 if self.config.n_episodes >= 100 else 1)
+        ep_returns = np.zeros(self.config.episodes)
+        pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar))
+        return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
         step = 0
         for i_episode in pbar:
             self.env.random_seed() # get different sequence

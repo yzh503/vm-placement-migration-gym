@@ -97,7 +97,7 @@ class Base:
     
         fig, axs = plt.subplots(2, figsize=(6, 2))
         im = axs[0].imshow(np.transpose(np.array(self.record.cpu)), cmap='pink', interpolation='nearest', aspect='auto', vmin=0, vmax=1)
-        axs[0].set(yticks=np.arange(0, self.env.config.p_num, dtype=int))
+        axs[0].set(yticks=np.arange(0, self.env.config.pms, dtype=int))
         axs[0].set(xlabel="Time step")
         axs[0].set(ylabel="PM #")
         cbar = plt.colorbar(im)

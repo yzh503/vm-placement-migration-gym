@@ -26,7 +26,7 @@ To see help,
 python main.py -h
 ```
 
-By default, the config file is `config/reward1.yml`.
+By default, the config file is `config/r2.yml`.
 
 To test the random agent and save results in `results/random.json`:
 
@@ -56,12 +56,12 @@ The experiment data are saved in `data`. When the experiments complete, draw plo
 ## Agents
 
 - ppo
-- ppomd
+- ppolstm
 - dqn
 - firstfit
-- firstfitmd
+- firstfit
 - bestfit
-- bestfitmd
+- bestfit
 - random
 
 where "md" means multi-discrete action space.
@@ -79,11 +79,11 @@ where "md" means multi-discrete action space.
 
 environment:
 
-- p_num: number of PMs
-- v_num: number of VMs
+- pms: number of PMs
+- vms: number of VMs
 - var: target variance
-- service_rate: service length mean for VMs
-- arrival_rate: 100% system load = p_num / distribution expectation / service rate
+- service_length: service length mean for VMs
+- arrival_rate: 100% system load = pms / distribution expectation / service rate
 - training_steps: number of steps in an episode in training
 - eval_steps: number of steps in an episode during evaluation
 - seed: integer to ensure reproducibility

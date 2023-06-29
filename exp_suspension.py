@@ -6,16 +6,19 @@ import numpy as np
 from multiprocessing import Pool
 from os.path import exists
 import copy 
-from exp_config import cores, episodes
+import exp
 
 def evaluate(args):
     agent, weightspath, load, sr = args
-    configfile = open('config/reward1.yml')
+    configfile = open('config/r2.yml')
     config = yaml.safe_load(configfile)
-
-    config['environment']['service_rate'] = sr
-    config['environment']['eval_steps'] = episodes
-    config['environment']['arrival_rate'] = int(config['environment']['p_num'])/0.55/int(config['environment']['service_rate']) * load
+    config['environment']['pms'] = exp.pms
+    config['environment']['vms'] = exp.vms
+    config['environment']['eval_steps'] = exp.episodes
+    config['environment']['reward_function'] = "utilisation"
+    config['environment']['service_length'] = sr
+    config['environment']['sequence'] = "uniform"
+    config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 3)
 
     args = []
     recordname = 'data/exp_suspension/%s-sr%dload%.2f.json' % (agent, sr, load)
@@ -60,19 +63,19 @@ if __name__ == '__main__':
     to_print = 'Agent, Load, Serv Rate, Total Served, Valid Suspend Actions, Valid Actions, Life, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
-    load = 1
+    load = exp.load
     for sr in np.arange(100, 4100, 200):
-        args.append(('firstfitmd', None, load, sr))
-        args.append(('bestfitmd', None, load, sr))
-        args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr))
+        args.append(('firstfit', None, load, sr))
+        args.append(('bestfit', None, load, sr))
+        args.append(('ppolstm', 'weights/ppolstm-r2.pt', load, sr))
 
-    sr = 1000
+    sr = exp.service_length
     for load in np.arange(0.2, 1.2, 0.1):
-        args.append(('firstfitmd', None, load, sr))
-        args.append(('bestfitmd', None, load, sr))
-        args.append(('ppomd', 'weights/ppomd-r1.pt', load, sr))
+        args.append(('firstfit', None, load, sr))
+        args.append(('bestfit', None, load, sr))
+        args.append(('ppolstm', 'weights/ppolstm-r2.pt', load, sr))
     
-    with Pool(cores) as pool: 
+    with Pool(exp.cores) as pool: 
         for res in pool.imap_unordered(evaluate, args): 
             to_print += res
 

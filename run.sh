@@ -1,29 +1,31 @@
 #!/bin/zsh
 
-python main.py -e -c config/reward1.yml -a firstfitmd -o results/firstfitmd.json
-python main.py -e -c config/reward1.yml -a bestfit -o results/bestfit.json 
+python main.py -e -c config/r2.yml -a firstfit -o results/firstfit.json
+python main.py -e -c config/r2.yml -a bestfit -o results/bestfit.json 
 
 # Train and evaluate dqn and ppo in the single-discrete action space using reward 1 
-python main.py -e -c config/reward1.yml -a ppo -o results/ppo-r1.json -w weights/ppo-r1.pt -l tensorboard -j ppo-r1 &
+python main.py -e -c config/r1.yml -a ppo -w weights/ppo-r1.pt -o results/ppo-r1.json -l tensorboard -j ppo-r1 &
 pid1=$!
-python main.py -e -c config/reward1.yml -a dqn -o results/dqn-r1.json -w weights/dqn-r1.pt -l tensorboard -j dqn-r1 &
+python main.py -e -c config/r2.yml -a ppo -w weights/ppo-r2.pt -o results/ppo-r2.json -l tensorboard -j ppo-r2 &
 pid2=$!
+python main.py -e -c config/r3.yml -a ppo -o -w weights/ppo-r3.pt results/ppo-r1.json -l tensorboard -j ppo-r3 &
+pid3=$!
 
 # Train PPO in multi-discrete action space using reward 1, 2, and 3
-python main.py -e -c config/reward1.yml -a ppomd -o results/ppomd-r1.json -w weights/ppomd-r1.pt -l tensorboard -j ppomd-r1 & 
-pid3=$!
-python main.py -e -c config/reward2.yml -a ppomd -o results/ppomd-r2.json -w weights/ppomd-r2.pt -l tensorboard -j ppomd-r2 &
-pid4=$! 
-python main.py -e -c config/reward3.yml -a ppomd -o results/ppomd-r3.json -w weights/ppomd-r3.pt -l tensorboard -j ppomd-r3 &
+python main.py -e -c config/r1.yml -a ppolstm -w weights/ppolstm-r1.pt -o results/ppolstm-r1.json -l tensorboard -j ppolstm-r1 & 
+pid4=$!
+python main.py -e -c config/r2.yml -a ppolstm -w weights/ppolstm-r2.pt -o results/ppolstm-r2.json -l tensorboard -j ppolstm-r2 &
+pid5=$! 
+python main.py -e -c config/r3.yml -a ppolstm -w weights/ppolstm-r3.pt -o results/ppolstm-r3.json -l tensorboard -j ppolstm-r3 &
 pid5=$!
 
 # Train and evaluate PPO in multi-discrete action space using reward 1, 2, and 3 on a 75% system load
-python main.py -e -c config/reward1-lowload.yml -a firstfitmd -o results/firstfitmd-low.json &
-pid6=$!
-python main.py -e -c config/reward1-lowload.yml -a bestfit -o results/bestfit-low.json &
+python main.py -e -c config/r2-low.yml -a firstfit -o results/firstfit-low.json &
 pid7=$!
-python main.py -e -c config/reward1-lowload.yml -a ppomd -o results/ppomd-r1-low.json -w weights/ppomd-r1-low.pt -l tensorboard -j ppomd-r1-low &
+python main.py -e -c config/r2-low.yml -a bestfit -o results/bestfit-low.json &
 pid8=$!
+python main.py -e -c config/r2-low.yml -a ppolstm -w weights/ppolstm-r2-low.pt -o results/ppolstm-r2-low.json -l tensorboard -j ppolstm-r2-low &
+pid9=$!
 
 wait $pid1
 wait $pid2
@@ -33,7 +35,9 @@ wait $pid5
 wait $pid6
 wait $pid7
 wait $pid8
+wait $pid9
 
+python exp_beta.py 
 python exp_performance.py 
 python exp_reward.py 
 python exp_suspension.py 

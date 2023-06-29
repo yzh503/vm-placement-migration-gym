@@ -2,19 +2,19 @@ from dataclasses import dataclass
 from src.agents.bestfit import BestFitAgent, BestFitConfig
 from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent, FirstFitConfig
-from src.agents.rppo import RecurrentPPOAgent, RPPOConfig
-from src.agents.lstmppo import LSTMPPOAgent, LSTMPPOConfig
+from src.agents.ppolstm import RecurrentPPOAgent, RecurrentPPOConfig
 from src.vm_gym.envs.env import EnvConfig
 from src.agents.dqn import DQNAgent, DQNConfig
 from src.record import Record
-import src.utils
-import random
+import gymnasium as gym
 import yaml, argparse
-import torch
-import os
 import numpy as np 
 import src.vm_gym
-import gymnasium as gym
+import src.utils
+import random
+import torch
+import os
+
 
 @dataclass
 class Args:
@@ -47,10 +47,8 @@ def run(args: Args) -> Record:
         agent = DQNAgent(env, DQNConfig(**training_config))
     elif args.agent == "ppo":
         agent = PPOAgent(env, PPOConfig(**training_config))
-    elif args.agent == "rppo":
-        agent = RecurrentPPOAgent(env, RPPOConfig(**training_config))
-    elif args.agent == "lstmppo":
-        agent = LSTMPPOAgent(env, LSTMPPOConfig(**training_config))
+    elif args.agent == "ppolstm":
+        agent = RecurrentPPOAgent(env, RecurrentPPOConfig(**training_config))
     elif args.agent == "firstfit":
         agent = FirstFitAgent(env, FirstFitConfig(**training_config))
     elif args.agent == "bestfit":
@@ -88,8 +86,8 @@ def run(args: Args) -> Record:
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-a", "--agent", required=True, choices=["dqn", "ppo", "firstfit", "bestfit", "rppo", "lstmppo"], help = "Choose an agent to train or evaluate.")
-    parser.add_argument("-c", "--config", default='config/reward1.yml', help = "Configuration for environment and agent")
+    parser.add_argument("-a", "--agent", required=True, choices=["dqn", "ppo", "firstfit", "bestfit", "rppo", "ppolstm"], help = "Choose an agent to train or evaluate.")
+    parser.add_argument("-c", "--config", default='config/r2.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")
     parser.add_argument("-j", "--jobname", help="Job name in tensorboard")

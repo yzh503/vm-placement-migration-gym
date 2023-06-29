@@ -6,26 +6,26 @@ from os.path import exists
 import copy
 import exp
 
-def evaluate_var(vars, evalmode):
+def evaluate_beta(betas, evalmode):
     configfile = open('config/r2.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.episodes
-    
+
     args = []
 
-    for var in vars: 
+    for beta in betas: 
         config = copy.deepcopy(config)
-        config['environment']['var'] = var
-
+        config['environment']['beta'] = beta
+        
         # Only if the service rate is long enough would migration be worthwhile. 
         if evalmode: 
             config['environment']['service_length'] = exp.service_length
             config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
 
-        recordname = f'data/exp_var/{var}.json'
-        weightsname = f'data/exp_var/{var}.pt'
+        recordname = f'data/exp_beta/{beta}.json'
+        weightsname = f'data/exp_beta/{beta}.pt'
 
         if evalmode and exists(recordname):
             continue
@@ -47,12 +47,12 @@ def evaluate_var(vars, evalmode):
     with Pool(exp.cores) as pool: 
         for record in pool.imap_unordered(main.run, args):   
             if record is None: 
-                print('1 training done.')
+                print('1 trained.')
             else: 
-                print(f"{record.env_config['var']} done.")
+                print(f"{record.env_config['beta']} evaluated.")
 
 if __name__ == '__main__': 
-    print("Evaluating Variance...")
-    vars = np.around(np.arange(0.01, 1, 0.1), decimals=2)
-    evaluate_var(vars, False)
-    evaluate_var(vars, True)
+    print("Evaluating beta...")
+    betas = np.around(np.arange(0.0, 1, 0.1), decimals=1)
+    evaluate_beta(betas, False)
+    evaluate_beta(betas, True)

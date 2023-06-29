@@ -21,7 +21,7 @@ class BestFitAgent(Base):
         pass
 
     def act(self, observation):
-        observation = utils.convert_obs_to_dict(self.env.config.v_num, self.env.config.p_num, observation)
+        observation = utils.convert_obs_to_dict(self.env.config.vms, self.env.config.pms, observation)
         vm_placement = np.array(observation["vm_placement"], copy=True)
         cpu = np.array(observation["cpu"], copy=True)
         memory = np.array(observation["memory"], copy=True)
@@ -31,7 +31,7 @@ class BestFitAgent(Base):
 
         action = np.copy(vm_placement)
 
-        for v in range(self.env.config.v_num):
+        for v in range(self.env.config.vms):
             if vm_placement[v] == -1: 
                 for best_pm in np.flip(np.argsort(prod)): 
                     valid = cpu[best_pm] + vm_cpu[v] <= 1 and memory[best_pm] + vm_memory[v] <= 1

@@ -13,8 +13,8 @@ from collections import deque
 from torch.utils.data import SequentialSampler, BatchSampler
 
 @dataclass
-class LSTMPPOConfig:
-    n_episodes: int
+class ppolstmConfig:
+    episodes: int
     hidden_size_1: int
     hidden_size_2: int
     lr: float
@@ -31,10 +31,10 @@ class LSTMPPOConfig:
     batch_size: int
     minibatch_size: int
     reward_scaling: bool
-    show_training_progress: bool
+    training_progress_bar: bool
 
     def __post_init__(self):
-        self.n_episodes = int(self.n_episodes)
+        self.episodes = int(self.episodes)
         self.hidden_size_1 = int(self.hidden_size_1)
         self.hidden_size_2 = int(self.hidden_size_2)
         self.lr = float(self.lr)
@@ -51,7 +51,7 @@ class LSTMPPOConfig:
         self.batch_size = int(self.batch_size)
         self.minibatch_size = int(self.minibatch_size)
         self.reward_scaling = bool(self.reward_scaling)
-        self.show_training_progress = bool(self.show_training_progress)
+        self.training_progress_bar = bool(self.training_progress_bar)
 
 class RunningMeanStd:
     # https://github.com/Lizhi-sjtu/DRL-code-pytorch/blob/69019cf9b1624db3871d4ed46e29389aadfdcb02/4.PPO-discrete/normalization.py
@@ -164,8 +164,8 @@ class Lstm(nn.Module):
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
         return action.T, logprob.sum(dim=0), entropy.sum(dim=0), new_hidden_actor
 
-class LSTMPPOAgent(Base):
-    def __init__(self, env: VmEnv, config: LSTMPPOConfig):
+class ppolstmAgent(Base):
+    def __init__(self, env: VmEnv, config: ppolstmConfig):
         super().__init__(type(self).__name__, env, config)
         self.init_model()
    
@@ -192,9 +192,9 @@ class LSTMPPOAgent(Base):
         self.model.eval()
 
     def learn(self):
-        ep_returns = np.zeros(self.config.n_episodes)
-        pbar = tqdm(range(int(self.config.n_episodes)), disable=not bool(self.config.show_training_progress))
-        return_factor = int(self.config.n_episodes*0.01 if self.config.n_episodes >= 100 else 1)
+        ep_returns = np.zeros(self.config.episodes)
+        pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar))
+        return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
 
         action_batch = torch.zeros((self.config.batch_size,self.env.action_space.nvec.size))
         obs_batch = torch.zeros(self.config.batch_size, self.obs_dim)
@@ -208,7 +208,7 @@ class LSTMPPOAgent(Base):
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
 
-        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) #StepLR(self.optimizer, step_size=self.config.n_episodes // 100, gamma=0.95)
+        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) #StepLR(self.optimizer, step_size=self.config.episodes // 100, gamma=0.95)
 
         for i_episode in pbar:
             current_ep_reward = 0
