@@ -10,7 +10,7 @@ from torch.optim import lr_scheduler
 from src.agents.base import Base
 from dataclasses import dataclass
 from collections import deque
-from torch.utils.data import BatchSampler, SubsetRandomSampler
+from torch.utils.data import SequentialSampler, BatchSampler
 
 @dataclass
 class LSTMPPOConfig:
@@ -100,7 +100,7 @@ class ObsNormalizer:
         x = (x - self.running_ms.mean) / (self.running_ms.std + 1e-8)
         return x
 
-def ortho_init(layer, scale=np.sqrt(2)):
+def ortho_init(layer, scale=1.0):
     nn.init.orthogonal_(layer.weight, gain=scale)
     nn.init.constant_(layer.bias, 0)
     return layer
@@ -111,7 +111,7 @@ class Lstm(nn.Module):
         self.action_nvec = action_space.nvec
         self.hidden_size_1 = hidden_size_1
         self.hidden_size_2 = hidden_size_2
-        self.layers = 1
+        self.layers = 2
 
         self.lstm_critic = nn.LSTM(input_size=obs_dim, hidden_size=hidden_size_1, num_layers=self.layers)
         self.critic = ortho_init(nn.Linear(hidden_size_2, 1), scale=1)
@@ -180,7 +180,7 @@ class LSTMPPOAgent(Base):
 
     def act(self, obs):
         action, _, _, hidden_actor = self.model.get_action(obs, self.hidden_actor)
-        self.hidden_actor = hidden_actor
+        self.hidden_actor = (hidden_actor[0].detach(), hidden_actor[1].detach())
         return action
 
     def save_model(self, modelpath):
@@ -253,79 +253,77 @@ class LSTMPPOAgent(Base):
             if i_episode > return_factor: 
                 pbar.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
 
-    def update(self, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch, hidden_actor, hidden_critic):
-
+    def update(self, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch, initial_hidden_actor, initial_hidden_critic):
         done_batch = done_batch.int()
 
-        # GAE advantages         
-        
-        with torch.no_grad():      
-            gae = 0     
+        # GAE advantages
+        with torch.no_grad():
+            gae = 0
             advantages = torch.zeros_like(rewards_batch)
-            values_batch = torch.flatten(self.model.get_value(obs_batch, hidden_critic)[0])
-            next_values = torch.flatten(self.model.get_value(next_obs_batch, hidden_critic)[0])
+            values_batch = torch.flatten(self.model.get_value(obs_batch, initial_hidden_critic)[0])
+            next_values = torch.flatten(self.model.get_value(next_obs_batch, initial_hidden_critic)[0])
             deltas = rewards_batch + (1 - done_batch) * self.config.gamma * next_values - values_batch
             for i in reversed(range(len(deltas))):
-                gae = deltas[i] + (1 - done_batch[i]) * self.config.gamma * self.config.lamda * gae 
+                gae = deltas[i] + (1 - done_batch[i]) * self.config.gamma * self.config.lamda * gae
                 advantages[i] = gae
-            
+
             returns = advantages + values_batch
 
         clipfracs = []
 
         for epoch in range(self.config.k_epochs):
-            minibatches = BatchSampler(
-                SubsetRandomSampler(range(self.config.batch_size)), 
-                batch_size=self.config.minibatch_size, 
-                drop_last=False)
-            
-            for bi, minibatch in enumerate(minibatches):
+            sequential_sampler = SequentialSampler(range(self.config.batch_size))
+            batch_sampler = BatchSampler(sequential_sampler, batch_size=self.config.minibatch_size, drop_last=False)
+
+            for bi, minibatch in enumerate(batch_sampler):
                 adv_minibatch = advantages[minibatch]
-                adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10) # Adv normalisation
-                
-                _, newlogprob, entropy, new_hidden_actor = self.model.get_action(obs_batch[minibatch], hidden_actor, action_batch[minibatch]) # 
-                log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
+                adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10)  # Adv normalisation
+
+                _, newlogprob, entropy, hidden_actor = self.model.get_action(obs_batch[minibatch], initial_hidden_actor,
+                                                                            action_batch[minibatch])
+                log_ratios = newlogprob - logprob_batch[minibatch]  # KL divergence
                 ratios = torch.exp(log_ratios)
-                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 9e-4), str(bi) + str(log_ratios) # newlogprob == logprob_batch in epoch 1 minibatch 1
+                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 9e-4), str(
+                    bi) + str(log_ratios)  # newlogprob == logprob_batch in epoch 1 minibatch 1
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())
-                
+
                 surr = -ratios * adv_minibatch
                 surr_clipped = -torch.clamp(ratios, 1 - self.config.eps_clip, 1 + self.config.eps_clip) * adv_minibatch
                 loss_clipped = torch.max(surr, surr_clipped).mean()
 
-                newvalues, new_hidden_critic = self.model.get_value(obs_batch[minibatch], hidden_critic)
-
-                if (minibatch == len(minibatches) - 1):
-                    hidden_actor = new_hidden_actor
-                    hidden_critic = new_hidden_critic
+                newvalues, hidden_critic = self.model.get_value(obs_batch[minibatch], initial_hidden_critic)
 
                 loss_vf_unclipped = torch.square(newvalues - returns[minibatch])
-                v_clipped = values_batch[minibatch] + torch.clamp(newvalues - values_batch[minibatch], -self.config.eps_clip, self.config.eps_clip)
+                v_clipped = values_batch[minibatch] + torch.clamp(newvalues - values_batch[minibatch], -self.config.eps_clip,
+                                                                self.config.eps_clip)
                 loss_vf_clipped = torch.square(v_clipped - returns[minibatch])
                 loss_vf_max = torch.max(loss_vf_unclipped, loss_vf_clipped)
 
-                if (self.config.vf_loss_clip):
+                if self.config.vf_loss_clip:
                     loss_vf = 0.5 * loss_vf_max.mean()
                 else:
-                    loss_vf = 0.5 * loss_vf_unclipped.mean() 
-    
-                loss = loss_clipped - self.config.ent_coef * entropy.mean() + self.config.vf_coef * loss_vf # maximise equation (9) from the original PPO paper
+                    loss_vf = 0.5 * loss_vf_unclipped.mean()
 
-                loss = loss_clipped - self.config.ent_coef * entropy.mean() + self.config.vf_coef * loss_vf # maximise equation (9) from the original PPO paper
+                loss = loss_clipped - self.config.ent_coef * entropy.mean() + self.config.vf_coef * loss_vf
 
                 self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
+                loss.backward(retain_graph=True)  # Specify retain_graph=True
                 nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
                 self.optimizer.step()
 
-        if self.writer: 
+        # Update LSTM states with the final states after gradient descent
+        hidden_actor = (hidden_actor[0].detach(), hidden_actor[1].detach())
+        hidden_critic = (hidden_critic[0].detach(), hidden_critic[1].detach())
+
+        if self.writer:
             self.writer.add_scalar('Training/loss_clipped', loss_clipped.item(), self.total_steps)
             self.writer.add_scalar('Training/loss_vf', loss_vf.item(), self.total_steps)
             self.writer.add_scalar('Training/entropy', entropy.mean().item(), self.total_steps)
             self.writer.add_scalar('Training/loss', loss.item(), self.total_steps)
             self.writer.add_scalar('Training/kl', -log_ratios.mean().item(), self.total_steps)
             self.writer.add_scalar('Training/clipfracs', np.mean(clipfracs), self.total_steps)
-        
+
         return hidden_actor, hidden_critic
+

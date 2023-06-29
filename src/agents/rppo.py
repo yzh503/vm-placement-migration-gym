@@ -24,7 +24,7 @@ class RecurrentPPOAgent(Base):
                                             action_space=self.env.action_space, 
                                             lr_schedule=lambda r: self.config.learning_rate,
                                             use_sde=False,
-                                            lstm_hidden_size=73)
+                                            lstm_hidden_size=512)
         self.model = RecurrentPPO(policy="MlpLstmPolicy",
                                   env=env, 
                                   learning_rate=self.config.learning_rate, 
@@ -32,6 +32,8 @@ class RecurrentPPOAgent(Base):
                                   batch_size=self.config.batch_size, 
                                   ent_coef=self.config.ent_coef,
                                   device="cpu")
+
+        self.lstm_states = None
         
     def learn(self):
         self.model.learn(total_timesteps=self.config.n_episodes * self.env.config.training_steps, 
@@ -44,5 +46,6 @@ class RecurrentPPOAgent(Base):
         self.model.save(modelpath)
 
     def act(self, observation):
-        action, _ = self.model.predict(observation)
+        action, lstm_states = self.model.predict(observation, state=self.lstm_states, deterministic=False)
+        self.lstm_states = lstm_states
         return action

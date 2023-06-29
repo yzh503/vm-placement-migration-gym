@@ -19,7 +19,7 @@ class EnvConfig(object):
     training_steps: int
     eval_steps: int
     seed: int
-    reward_function: int
+    reward_function: str
     sequence: str
     cap_target_util: bool
     beta: int
@@ -34,7 +34,7 @@ class EnvConfig(object):
         self.eval_steps = int(self.eval_steps)
         self.sequence = str(self.sequence)
         self.seed = int(self.seed)
-        self.reward_function = int(self.reward_function)
+        self.reward_function = str(self.reward_function)
         self.cap_target_util = bool(self.cap_target_util)
         self.beta = int(self.beta)
 
@@ -137,7 +137,7 @@ class VmEnv(gym.Env):
         if self.config.cap_target_util and self.target_memory_mean > 1: 
             self.target_memory_mean = 1.0
 
-        if self.config.reward_function == 1: # KL divergence between from approximator to true
+        if self.config.reward_function == "kl": # KL divergence between from approximator to true
             # std = np.std(self.cpu) 
             # target_sd = np.sqrt(self.config.var)
             current = MultivariateNormal(loc=torch.tensor([np.mean(self.cpu), np.mean(self.memory)]), covariance_matrix=torch.eye(2))
@@ -146,7 +146,7 @@ class VmEnv(gym.Env):
                 reward = 0.0
             else:
                 reward = - kl_divergence(target,current).item()      
-        elif self.config.reward_function == 2: 
+        elif self.config.reward_function == "utilisation": 
             cpu_rate = self.cpu[self.cpu > 0]
             memory_rate = self.memory[self.memory > 0]
 
@@ -154,8 +154,13 @@ class VmEnv(gym.Env):
                 reward = self.config.beta * np.mean(cpu_rate) + (1 - self.config.beta) * np.mean(memory_rate)
             else:
                 reward = 0.0
-        elif self.config.reward_function == 3:
+        elif self.config.reward_function == "waiting_ratio":
             reward = - self.waiting_ratio 
+        elif self.config.reward_function == "waiting_time":
+            if self.vm_waiting_time[self.vm_waiting_time > 0].size == 0: 
+                reward = 0.0
+            else:
+                reward = - np.mean(self.vm_waiting_time[self.vm_waiting_time > 0])
         else: 
             assert False, f'Function does not exist: {self.config.reward_function}'
 
