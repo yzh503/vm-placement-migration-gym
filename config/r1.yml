@@ -21,3 +21,6 @@ agents:
   dqn: 
       episodes: 2000
       device: cpu
+  rainbow: 
+      episodes: 2000
+      hidden_size: 73

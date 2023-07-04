@@ -27,6 +27,7 @@ class Record:
         self.total_memory_requested = list[int]()
         self.suspended = list[int]() # suspend actions
         self.placed = list[int]() # place actions
+        self.vmsratio = list[float]() # ratio of used vms slot
 
     @property
     def unique_vms_placement(self):
@@ -150,8 +151,6 @@ class Record:
 
         record.cpu = jsondict['cpu']
         record.memory = jsondict['memory']
-        record.vm_cpu = jsondict['vm_cpu']
-        record.vm_memory = jsondict['vm_memory']
         if 'used_pm' in jsondict:
             record.used_pm = jsondict['used_pm']
         record.vm_placements = jsondict['vm_placements']

@@ -17,15 +17,6 @@ def get_action_pair(action: int, pms: int):
 def get_action(v, p, pms):
     return (pms + 1) * v + (p + 1)
 
-def convert_obs_to_dict(vms: int, pms: int, observation: list) -> dict:
-    return dict(
-        vm_placement=[int(i) for i in observation[:vms]],  
-        vm_cpu=observation[vms:vms*2], 
-        vm_memory=observation[vms*2:vms*3], 
-        cpu=observation[vms*3:vms*3 + pms],
-        memory=observation[vms*3 + pms:],
-    )
-
 def check_dir(output: str):
     dir = '/'.join(output.split('/')[:-1])
     if len(dir) > 0 and not os.path.exists(dir): 
@@ -33,6 +24,9 @@ def check_dir(output: str):
 
 def ensure_parent_dirs_exist(file_path):
     parent_dir = os.path.dirname(file_path)
-
+    print(parent_dir)
     if not os.path.exists(parent_dir):
-        os.makedirs(parent_dir)
+        try: 
+            os.makedirs(parent_dir)
+        except Exception as e: 
+            print(e)

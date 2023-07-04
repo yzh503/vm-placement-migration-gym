@@ -12,18 +12,17 @@ def evaluate_beta(betas, evalmode):
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.episodes
-
+    if evalmode: 
+        config['environment']['service_length'] = exp.service_length
+        config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
+    
     args = []
 
     for beta in betas: 
         config = copy.deepcopy(config)
         config['environment']['beta'] = beta
-        
-        # Only if the service rate is long enough would migration be worthwhile. 
-        if evalmode: 
-            config['environment']['service_length'] = exp.service_length
-            config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
 
+        # Only if the service rate is long enough would migration be worthwhile. 
         recordname = f'data/exp_beta/{beta}.json'
         weightsname = f'data/exp_beta/{beta}.pt'
 
@@ -34,7 +33,7 @@ def evaluate_beta(betas, evalmode):
             continue
 
         args.append(main.Args(
-                agent='ppolstm', 
+                agent='ppo', 
                 config=config, 
                 silent=True,
                 logdir=None,
@@ -53,6 +52,6 @@ def evaluate_beta(betas, evalmode):
 
 if __name__ == '__main__': 
     print("Evaluating beta...")
-    betas = np.around(np.arange(0.0, 1, 0.1), decimals=1)
+    betas = np.around(np.arange(0.0, 1, 0.1), decimals=2)
     evaluate_beta(betas, False)
     evaluate_beta(betas, True)

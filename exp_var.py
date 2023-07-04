@@ -34,7 +34,7 @@ def evaluate_var(vars, evalmode):
             continue
 
         args.append(main.Args(
-                agent='ppolstm', 
+                agent='ppo', 
                 config=config, 
                 silent=True,
                 logdir=None,

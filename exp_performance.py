@@ -81,7 +81,7 @@ def evaluate_seeds(args, results):
     cpu_var_multitests = np.var(cpu, axis=2)
     cpu_var = np.mean(cpu_var_multitests, axis=0)
     memory_mean_multitests = np.mean(memory, axis=2)
-    memory_var = np.var(memory, axis=2)
+    memory_var = np.var(memory, axis=0)
     
     results['agent'] += [agent] * exp.episodes
     results['load'] += [load] * exp.episodes
@@ -103,6 +103,8 @@ def evaluate_seeds(args, results):
     to_print += '%d,' % (np.mean(total_suspended))
     to_print += '%.3f,' % (np.mean(cpu_mean_multitests))
     to_print += '%.3f,' % (np.mean(cpu_var))
+    to_print += '%.3f,' % (np.mean(memory_mean_multitests))
+    to_print += '%.3f,' % (np.mean(memory_var))
     to_print += '%.3f,' % (np.mean(pending_rates))
     to_print += '%.3f,' % (np.mean(waiting_ratios))
     to_print += '%.3f\n' % (np.mean(slowdown_rates))

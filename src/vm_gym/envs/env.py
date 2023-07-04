@@ -11,32 +11,18 @@ EMPTY_SLOT = -2
 
 @dataclass
 class EnvConfig(object):
-    arrival_rate: float
-    service_length: float
-    pms: int
-    vms: int
-    var: float # std deviation of normal in KL divergence 
-    training_steps: int
-    eval_steps: int
-    seed: int
-    reward_function: str
-    sequence: str
-    cap_target_util: bool
-    beta: int
-
-    def __post_init__(self):
-        self.arrival_rate = float(self.arrival_rate)
-        self.service_length = float(self.service_length)
-        self.pms = int(self.pms)
-        self.vms = int(self. vms)
-        self.var = float(self.var)
-        self.training_steps = int(self.training_steps)
-        self.eval_steps = int(self.eval_steps)
-        self.sequence = str(self.sequence)
-        self.seed = int(self.seed)
-        self.reward_function = str(self.reward_function)
-        self.cap_target_util = bool(self.cap_target_util)
-        self.beta = int(self.beta)
+    arrival_rate: float = 0.182 # 100% system load: pms / distribution expectation / service rate 
+    service_length: float = 100
+    pms: int = 10
+    vms: int = 30   
+    var: float = 0.01 # std deviation of normal in KL divergence 
+    training_steps: int = 500
+    eval_steps: int = 100000
+    seed: int = 0
+    reward_function: str = "waiting_ratio"
+    sequence: str = "uniform"
+    cap_target_util: bool = True
+    beta: int = 0.5
 
 class VmEnv(gym.Env):
 
@@ -49,6 +35,8 @@ class VmEnv(gym.Env):
         self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.config.pms + 1))  # Every VM has (PMs + wait status) actions
         self.reset(self.config.seed)
 
+        print("Environment initialized with config: ", self.config)
+
     def _placement_valid(self, pm, vm):
         return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
 
@@ -60,13 +48,10 @@ class VmEnv(gym.Env):
         self.cpu[pm] += self.vm_cpu[vm]
         self.memory[pm] += self.vm_memory[vm]
 
-    def step(self, action, eval_mode=False):
+    def step(self, action):
         action = action.copy()
-        action -= 1 # -1 denotes waiting
+        action -= 1 # -1 for wait status
         actions_valid = np.zeros_like(action)
-
-        if eval_mode: 
-            self.last_vm_placement = np.copy(self.vm_placement)
 
         for vm, move_to_pm in enumerate(action): 
             current_pm = self.vm_placement[vm]
@@ -94,7 +79,7 @@ class VmEnv(gym.Env):
                 else: 
                     pass # do not change PM utilisation 
 
-        obs, reward, done, info = self._process_action()
+        obs, reward, terminated, info = self._process_action()
 
         info = info | {
             "action": action.tolist(),
@@ -108,8 +93,8 @@ class VmEnv(gym.Env):
 
         self.timestep += 1
         truncated = False
-        return obs, reward, done, truncated, info  
-    
+        return obs, reward, terminated, truncated, info  
+
     @property
     def n_actions(self):
         if isinstance(self.action_space, spaces.Discrete):
@@ -147,8 +132,8 @@ class VmEnv(gym.Env):
             else:
                 reward = - kl_divergence(target,current).item()      
         elif self.config.reward_function == "utilisation": 
-            cpu_rate = self.cpu[self.cpu > 0]
-            memory_rate = self.memory[self.memory > 0]
+            cpu_rate = self.cpu[self.cpu >= 0]
+            memory_rate = self.memory[self.memory >= 0]
 
             if cpu_rate.size > 0 or memory_rate.size > 0: 
                 reward = self.config.beta * np.mean(cpu_rate) + (1 - self.config.beta) * np.mean(memory_rate)
@@ -167,15 +152,15 @@ class VmEnv(gym.Env):
         obs = self._get_obs()
 
         if self.eval_mode: 
-            done = self.timestep >= self.config.eval_steps
+            terminated = self.timestep >= self.config.eval_steps
         else:
-            done = self.timestep >= self.config.training_steps
+            terminated = self.timestep >= self.config.training_steps
 
         info = self._get_info()
 
-        return obs, reward, done, info
+        return obs, reward, terminated, info
 
-    def random_seed(self, seed):
+    def seed(self, seed):
         if seed is None:
             seed = self.config.seed
         self.rng1 = np.random.default_rng(seed)
@@ -185,7 +170,7 @@ class VmEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.random_seed(seed)
+        self.seed(seed)
         # Observable
         self.vm_placement = np.full(self.config.vms, EMPTY_SLOT) # -1 is a VM request. -2 is an empty slot. 0... are PM indices. 
         self.vm_cpu = np.zeros(self.config.vms) 
@@ -249,6 +234,15 @@ class VmEnv(gym.Env):
 
     def close(self):
         pass
+
+    def convert_obs_to_dict(self, observation: np.ndarray) -> dict:
+        return dict(
+            vm_placement=observation[:self.config.vms].astype(int),  
+            vm_cpu=observation[self.config.vms:self.config.vms*2], 
+            vm_memory=observation[self.config.vms*2:self.config.vms*3], 
+            cpu=observation[self.config.vms*3:self.config.vms*3 + self.config.pms],
+            memory=observation[self.config.vms*3 + self.config.pms:],
+        )
 
     def _run_vms(self):
         vm_running = np.argwhere(np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement > WAIT_STATUS))

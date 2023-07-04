@@ -21,10 +21,10 @@ class FirstFitAgent(Base):
         pass
 
     def act(self, observation):
-        observation = utils.convert_obs_to_dict(self.env.config.vms, self.env.config.pms, observation)
-        vm_placement = np.array(observation["vm_placement"], copy=True)
-        cpu = np.array(observation["cpu"], copy=True)
-        memory = np.array(observation["memory"], copy=True)
+        observation = self.env.convert_obs_to_dict(observation)
+        vm_placement = np.array(observation["vm_placement"])
+        cpu = np.array(observation["cpu"])
+        memory = np.array(observation["memory"])
         vm_cpu = np.array(observation["vm_cpu"])
         vm_memory = np.array(observation["vm_memory"])
 
@@ -33,7 +33,7 @@ class FirstFitAgent(Base):
         for v in range(self.env.config.vms):
             if vm_placement[v] == -1: 
                 for p in range(len(cpu)): 
-                    if cpu[p] + vm_cpu[v] < 1 and memory[p] + vm_memory[v] < 1:
+                    if cpu[p] + vm_cpu[v] <= 1 and memory[p] + vm_memory[v] <= 1:
                         action[v] = p # first status is waiting 
                         cpu[p] += vm_cpu[v]
                         break

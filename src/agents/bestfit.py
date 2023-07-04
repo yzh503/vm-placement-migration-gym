@@ -21,7 +21,7 @@ class BestFitAgent(Base):
         pass
 
     def act(self, observation):
-        observation = utils.convert_obs_to_dict(self.env.config.vms, self.env.config.pms, observation)
+        observation = self.env.convert_obs_to_dict(observation)
         vm_placement = np.array(observation["vm_placement"], copy=True)
         cpu = np.array(observation["cpu"], copy=True)
         memory = np.array(observation["memory"], copy=True)

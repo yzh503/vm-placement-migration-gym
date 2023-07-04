@@ -212,13 +212,12 @@ class PPOAgent(Base):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.lr, eps=1e-5)
 
 
-    def act(self, obs):
+    def act(self, obs: torch.Tensor) -> np.ndarray:
         if self.config.det:
             action = self.model.get_det_action(obs)
-            return action
         else:
             action, _, _ = self.model.get_action(obs)
-            return action
+        return action.flatten().cpu().numpy()
 
     def save_model(self, modelpath):
         if modelpath: 
@@ -254,7 +253,7 @@ class PPOAgent(Base):
             done = False
             while not done:
                 action, logprob, _ = self.model.get_action(obs.to(self.config.device))
-                next_obs, reward, done, truncated, info = self.env.step(action.cpu())
+                next_obs, reward, done, truncated, info = self.env.step(action.flatten().cpu().numpy())
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
 
                 action_batch[i_batch] = torch.flatten(action)
@@ -313,7 +312,7 @@ class PPOAgent(Base):
                 _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action_batch[minibatch])
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
-                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 2e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.
+                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())

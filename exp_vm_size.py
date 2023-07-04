@@ -11,17 +11,16 @@ import exp
 
 def evaluate_seeds(agent, weightspath, seq):
     configfile = open('config/r2.yml')
+    config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
-    config = yaml.safe_load(configfile)
-
     config['environment']['eval_steps'] = exp.episodes
     config['environment']['sequence'] = seq
 
     if seq == 'lowuniform':
-        config['environment']['arrival_rate'] = config['environment']['p_num']/0.375/config['environment']['service_length']
+        config['environment']['arrival_rate'] = config['environment']['pms']/0.375/config['environment']['service_length']
     elif seq == 'highuniform':
-        config['environment']['arrival_rate'] = config['environment']['p_num']/0.625/config['environment']['service_length']
+        config['environment']['arrival_rate'] = config['environment']['pms']/0.625/config['environment']['service_length']
 
     args = []
     records = []

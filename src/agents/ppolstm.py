@@ -23,7 +23,7 @@ class RecurrentPPOAgent(Base):
                                   n_steps=self.env.config.training_steps, 
                                   learning_rate=self.config.learning_rate, 
                                   device=self.config.device,
-                                  policy_kwargs=dict(lstm_hidden_size=self.config.hidden_size, n_lstm_layers=self.config.n_lstm_layers))
+                                  policy_kwargs=dict(lstm_hidden_size=self.config.lstm_hidden_size, n_lstm_layers=self.config.n_lstm_layers))
 
         self.lstm_states = None
         
