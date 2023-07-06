@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional, Tuple
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -48,11 +49,10 @@ class VmEnv(gym.Env):
         self.cpu[pm] += self.vm_cpu[vm]
         self.memory[pm] += self.vm_memory[vm]
 
-    def step(self, action):
+    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
         action = action.copy()
         action -= 1 # -1 for wait status
         actions_valid = np.zeros_like(action)
-
         for vm, move_to_pm in enumerate(action): 
             current_pm = self.vm_placement[vm]
             action_valid = True
@@ -96,7 +96,7 @@ class VmEnv(gym.Env):
         return obs, reward, terminated, truncated, info  
 
     @property
-    def n_actions(self):
+    def n_actions(self) -> int:
         if isinstance(self.action_space, spaces.Discrete):
             return self.action_space.n
         elif isinstance(self.action_space, spaces.MultiDiscrete):
@@ -160,7 +160,7 @@ class VmEnv(gym.Env):
 
         return obs, reward, terminated, info
 
-    def seed(self, seed):
+    def seed(self, seed: Optional[int] = None):
         if seed is None:
             seed = self.config.seed
         self.rng1 = np.random.default_rng(seed)
@@ -168,7 +168,7 @@ class VmEnv(gym.Env):
         self.rng3 = np.random.default_rng(seed+2)
         self.rng4 = np.random.default_rng(seed+3)
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed: Optional[int] = None):
         super().reset(seed=seed)
         self.seed(seed)
         # Observable
@@ -218,7 +218,7 @@ class VmEnv(gym.Env):
 
         return self._get_obs(), self._get_info()
 
-    def render(self, mode='ansi', close=False):
+    def render(self, mode: str = 'ansi', close: bool = False):
         np.set_printoptions(linewidth=np.inf)
         print(f"Timestep: \t\t{self.timestep}")
         print(f"VM request: \t\t{np.count_nonzero(self.vm_placement == -1)}, dropped: {self.dropped_requests}")
@@ -234,15 +234,6 @@ class VmEnv(gym.Env):
 
     def close(self):
         pass
-
-    def convert_obs_to_dict(self, observation: np.ndarray) -> dict:
-        return dict(
-            vm_placement=observation[:self.config.vms].astype(int),  
-            vm_cpu=observation[self.config.vms:self.config.vms*2], 
-            vm_memory=observation[self.config.vms*2:self.config.vms*3], 
-            cpu=observation[self.config.vms*3:self.config.vms*3 + self.config.pms],
-            memory=observation[self.config.vms*3 + self.config.pms:],
-        )
 
     def _run_vms(self):
         vm_running = np.argwhere(np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement > WAIT_STATUS))

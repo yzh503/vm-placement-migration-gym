@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 from src.agents.base import Base
-import src.utils as utils
+from src.utils import convert_obs_to_dict
 
 @dataclass
 class FirstFitConfig: 
@@ -21,7 +21,7 @@ class FirstFitAgent(Base):
         pass
 
     def act(self, observation):
-        observation = self.env.convert_obs_to_dict(observation)
+        observation = convert_obs_to_dict(self.env.config, observation)
         vm_placement = np.array(observation["vm_placement"])
         cpu = np.array(observation["cpu"])
         memory = np.array(observation["memory"])

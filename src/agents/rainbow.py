@@ -12,12 +12,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
-
+from src.utils import convert_obs_to_dict
 from src.segment_tree import MinSegmentTree, SumSegmentTree
-
 from src.agents.base import Base
 from src.vm_gym.envs.env import VmEnv
-from src.vm_gym.envs.preprocess import PreprocessEnv
 
 class ReplayBuffer:
     def __init__(
@@ -419,7 +417,6 @@ class RainbowAgent(Base):
 
     def __init__(self, env: VmEnv, config: RainbowConfig):
         super().__init__(type(self).__name__, env, config)
-        self.env = PreprocessEnv(self.env)
         self.device = config.device
         
         obs_dim = self.env.observation_space.shape[0]
@@ -466,14 +463,14 @@ class RainbowAgent(Base):
             self.env.seed(self.env.config.seed + i_episode) # get different sequence
             current_ep_reward = 0
             previous_obs, info = self.env.reset()
-            previous_obs = previous_obs.to(self.device)
+            previous_obs = torch.from_numpy(previous_obs).float().to(self.device)
             done = False
             update_cnt = 0
 
             while not done:
                 action = self._select_action(previous_obs)
                 obs, reward, terminated, truncated, info = self.env.step(self._multi_discrete(previous_obs, action))
-                obs = obs.to(self.device)
+                obs = torch.from_numpy(obs).float().to(self.device)
                 done = terminated or truncated
 
                 fraction = min(i_episode / self.config.episodes, 1.0)
@@ -513,13 +510,13 @@ class RainbowAgent(Base):
 
 
     def _multi_discrete(self, observation: torch.Tensor, action: list[torch.Tensor]) -> np.ndarray:
-        obsdict = self.env.convert_obs_to_dict(observation.flatten().numpy()) 
+        obsdict = convert_obs_to_dict(observation.flatten().numpy()) 
         vm_placement = obsdict["vm_placement"]
         vm = action[0]
         vm_placement[vm] = action[1] - 1 # first action denotes waiting
         return np.array(vm_placement) + 1 # action space starts from 0
 
-    def act(self, observation):
+    def act(self, observation: np.ndarray) -> np.ndarray:
         selected_action = self._select_action(observation)
         return self._multi_discrete(observation, selected_action)
 

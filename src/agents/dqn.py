@@ -14,7 +14,6 @@ from collections import namedtuple, deque
 
 from src.agents.base import Base
 from src.vm_gym.envs.env import VmEnv
-from src.vm_gym.envs.preprocess import PreprocessEnv
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -74,7 +73,6 @@ class DQNAgent(Base):
 
     def __init__(self, env: VmEnv, config: DQNConfig):
         super().__init__(type(self).__name__, env, config)
-        self.env = PreprocessEnv(self.env)
         self.device = self.config.device
         
         self.obs_dims = self.env.observation_space.shape[0]
@@ -108,13 +106,14 @@ class DQNAgent(Base):
             self.env.seed(self.env.config.seed + i_episode) # get different sequence
             current_ep_reward = 0
             previous_obs, info = self.env.reset(self.env.config.seed)
+            previous_obs = torch.from_numpy(previous_obs).float().to(self.device)
             done = False
 
             while not done:
                 # Select and perform an action
                 action = self._select_action(previous_obs)
-                obs, reward, done, truncated, info = self.env.step(action)
-                reward = torch.tensor([reward], device=self.device)
+                obs, reward, done, truncated, info = self.env.step(action.numpy())
+                obs = torch.from_numpy(obs).float().to(self.device)
                 self.memory.push(previous_obs, action, obs, reward)
                 previous_obs = obs       
                 current_ep_reward += reward.item()  # For logging
@@ -138,8 +137,9 @@ class DQNAgent(Base):
         for r in range(ep_returns.size):
             ep_returns_median[r] = np.median(ep_returns[r-return_factor:r])
 
-    def act(self, observation):
-        return self.policy_net.select_action(observation)
+    def act(self, observation: np.ndarray) -> np.ndarray:
+        observation = torch.from_numpy(observation).float().to(self.device)
+        return self.policy_net.select_action(observation).cpu().numpy()
 
     def _select_action(self, observation):
         EPS_START = self.config.eps_start
@@ -150,7 +150,7 @@ class DQNAgent(Base):
         self.steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():                
-                return self.act(observation)
+                return self.policy_net.select_action(observation)
         else:
             n_actions = self.env.action_space.nvec[0]
             return torch.tensor([[random.randrange(n_actions) for _ in range(self.env.config.pms)]], device=self.device, dtype=torch.long)

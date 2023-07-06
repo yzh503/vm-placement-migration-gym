@@ -1,5 +1,8 @@
 import numpy as np
-import os
+import os, torch
+from typing import Union
+
+from src.vm_gym.envs.env import EnvConfig
 
 def override_dict(template: dict, overrider: dict) -> dict:
     template = template.copy()
@@ -30,3 +33,16 @@ def ensure_parent_dirs_exist(file_path):
             os.makedirs(parent_dir)
         except Exception as e: 
             print(e)
+
+def convert_obs_to_dict(config: EnvConfig, observation: Union[torch.Tensor, np.ndarray]) -> dict:
+    if isinstance(observation, torch.Tensor):
+        vm_placement = observation[:config.vms].to(int)
+    else: 
+        vm_placement = observation[:config.vms].astype(int)
+    return dict(
+        vm_placement=vm_placement,  
+        vm_cpu=observation[config.vms:config.vms*2], 
+        vm_memory=observation[config.vms*2:config.vms*3], 
+        cpu=observation[config.vms*3:config.vms*3 + config.pms],
+        memory=observation[config.vms*3 + config.pms:],
+    )

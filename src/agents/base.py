@@ -38,15 +38,15 @@ class Base:
         raise NotImplementedError
 
     @abstractmethod
-    def act(self, observation: Union[np.ndarray, torch.Tensor, list]) -> int:
+    def act(self, observation: np.ndarray) -> np.ndarray:
         raise NotImplementedError
     
     @abstractmethod
-    def save_model(self, modelpath):
+    def save_model(self, modelpath: str):
         raise NotImplementedError
 
     @abstractmethod
-    def load_model(self, modelpath):
+    def load_model(self, modelpath: str):
         raise NotImplementedError
     
     def test(self, show: bool = False, output: str = None, debug: bool = False):

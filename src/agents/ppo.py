@@ -5,10 +5,10 @@ import numpy as np
 from src.vm_gym.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
-from src.vm_gym.envs.preprocess import PreprocessEnv
 from torch.optim import lr_scheduler
 from src.agents.base import Base
 from dataclasses import dataclass
+import gymnasium
 from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSampler
 @dataclass
 class PPOConfig:
@@ -102,7 +102,7 @@ class MlpShared(nn.Module):
         return self.critic(self.shared_network(obs))
 
     def get_action(self, obs, action=None):
-        logits = self.actor(self.shared_network(obs))
+        logits = self.actor(self.shared_network(obs)).unsqueeze(0)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
@@ -119,18 +119,18 @@ class MlpShared(nn.Module):
         return torch.argmax(split_logits, dim=1)
 
 class MlpSeparate(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size):
+    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int):
         super(MlpSeparate, self).__init__()
         self.action_nvec = action_space.nvec
         self.critic = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size)),
+            ortho_init(nn.Linear(input_size, hidden_size)),
             nn.Tanh(),
             ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
             ortho_init(nn.Linear(hidden_size, 1), scale=1)
         )
         self.actor = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size)),
+            ortho_init(nn.Linear(input_size, hidden_size)),
             nn.Tanh(),
             ortho_init(nn.Linear(hidden_size, hidden_size)),
             nn.Tanh(),
@@ -141,7 +141,7 @@ class MlpSeparate(nn.Module):
         return self.critic(obs)
 
     def get_action(self, obs, action=None):
-        logits = self.actor(obs)
+        logits = self.actor(obs).unsqueeze(0)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
@@ -181,7 +181,7 @@ class MlpCont(nn.Module):
         return self.critic(obs)
 
     def get_action(self, obs, actions=None):
-        action_means = self.actor_means(obs)
+        action_means = self.actor_means(obs).unsqueeze(0)
         action_logstds = self.actor_logstds.expand_as(action_means)
         action_stds = torch.exp(action_logstds)
         probs = Normal(action_means, action_stds)
@@ -198,7 +198,6 @@ class PPOAgent(Base):
         self.init_model()
    
     def init_model(self):
-        self.env = PreprocessEnv(self.env)
         self.obs_dim = self.env.observation_space.shape[0]
         if self.config.network_arch == 'shared':
             self.model = MlpShared(self.obs_dim, self.env.action_space, self.config.hidden_size)
@@ -212,7 +211,8 @@ class PPOAgent(Base):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.lr, eps=1e-5)
 
 
-    def act(self, obs: torch.Tensor) -> np.ndarray:
+    def act(self, obs: np.ndarray) -> np.ndarray:
+        obs = torch.from_numpy(obs).float().to(self.config.device)
         if self.config.det:
             action = self.model.get_det_action(obs)
         else:
@@ -250,15 +250,18 @@ class PPOAgent(Base):
         for i_episode in pbar:
             current_ep_reward = 0
             obs, _ = self.env.reset(self.env.config.seed + i_episode)
+            obs = torch.from_numpy(obs).float().to(self.config.device)
             done = False
             while not done:
-                action, logprob, _ = self.model.get_action(obs.to(self.config.device))
-                next_obs, reward, done, truncated, info = self.env.step(action.flatten().cpu().numpy())
+                action, logprob, _ = self.model.get_action(obs)
+                action = torch.flatten(action)
+                next_obs, reward, done, truncated, info = self.env.step(action.cpu().numpy())
+                next_obs = torch.from_numpy(next_obs).float().to(self.config.device)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
 
-                action_batch[i_batch] = torch.flatten(action)
-                obs_batch[i_batch] = torch.flatten(obs.to(self.config.device))
-                next_obs_batch[i_batch] = torch.flatten(next_obs.to(self.config.device))
+                action_batch[i_batch] = action
+                obs_batch[i_batch] = torch.flatten(obs)
+                next_obs_batch[i_batch] = torch.flatten(next_obs)
                 logprob_batch[i_batch] = logprob.item()
                 rewards_batch[i_batch] = reward_t
                 done_batch[i_batch] = done

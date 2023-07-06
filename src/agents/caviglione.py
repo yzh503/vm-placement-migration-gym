@@ -3,27 +3,20 @@ Rainbow DQN implementation adapted from https://github.com/Curt-Park/rainbow-is-
 """
 from dataclasses import dataclass
 import math
-import os
 import random
 from collections import deque
 from typing import Deque, Dict, List, Tuple
-
-import gymnasium as gym
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from IPython.display import clear_output
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
-
 from src.segment_tree import MinSegmentTree, SumSegmentTree
-
 from src.agents.base import Base
 from src.vm_gym.envs.env import VmEnv
-from src.vm_gym.envs.preprocess import PreprocessEnv
+from src.utils import convert_obs_to_dict
 
 class ReplayBuffer:
     """A simple numpy replay buffer."""
@@ -389,6 +382,7 @@ class Network(nn.Module):
 class CaviglioneConfig(object):
     episodes: int = 2000
     hidden_size: int = 128
+    lr: float = 3e-5
     memory_size: int = 100000
     batch_size: int = 100
     target_update: int = 5
@@ -407,12 +401,9 @@ class CaviglioneAgent(Base):
 
     def __init__(self, env: VmEnv, config: CaviglioneConfig):
         super().__init__(type(self).__name__, env, config)
-        self.env = PreprocessEnv(self.env)
         self.device = config.device
-        
         obs_dim = self.env.observation_space.shape[0]
-        n_actions = 3 # first fit, norm2, dot product 
-
+        self.n_actions = 3 # first fit, norm2, dot product 
         self.memory = PrioritizedReplayBuffer(obs_dim, config.memory_size, config.batch_size, alpha=config.alpha)
         self.use_n_step = True if config.n_step > 1 else False
         if self.use_n_step:
@@ -424,14 +415,14 @@ class CaviglioneAgent(Base):
         # Categorical DQN parameters
         self.support = torch.linspace(config.v_min, config.v_max, config.atom_size).to(self.device)
 
-        self.dqn = Network(obs_dim, config.hidden_size, n_actions, config.atom_size, self.support).to(self.device)
+        self.dqn = Network(obs_dim, config.hidden_size, self.n_actions, config.atom_size, self.support).to(self.device)
         self.dqn = torch.compile(self.dqn)
-        self.dqn_target = Network(obs_dim, config.hidden_size, n_actions, config.atom_size, self.support).to(self.device)
+        self.dqn_target = Network(obs_dim, config.hidden_size, self.n_actions, config.atom_size, self.support).to(self.device)
         self.dqn_target = torch.compile(self.dqn_target)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
 
-        self.optimizer = optim.Adam(self.dqn.parameters())
+        self.optimizer = optim.Adam(self.dqn.parameters(), lr=config.lr)
         self.transition = list()
         self.is_test = False
     
@@ -439,12 +430,13 @@ class CaviglioneAgent(Base):
         self.is_test = True
     
     def load_model(self, modelpath):
-        self.policy_net = torch.load(modelpath)
-        self.policy_net.eval()
+        self.dqn.load_state_dict(torch.load(modelpath))
+        self.dqn_target.load_state_dict(self.dqn.state_dict())
+        self.dqn_target.eval()
     
     def save_model(self, modelpath):
         if modelpath: 
-            torch.save(self.policy_net, modelpath)
+            torch.save(self.dqn.state_dict(), modelpath)
 
     def learn(self):
         ep_returns = np.zeros(self.config.episodes)
@@ -455,25 +447,25 @@ class CaviglioneAgent(Base):
             self.env.seed(self.env.config.seed + i_episode) # get different sequence
             current_ep_reward = 0
             previous_obs, info = self.env.reset()
+            previous_obs = torch.from_numpy(previous_obs).float().to(self.device)
             done = False
             update_cnt = 0
 
             while not done:
                 action = self._select_action(previous_obs)
-                i_vm = torch.argwhere(previous_obs[:self.env.config.vms] == -1)
+                i_vm = torch.argwhere(previous_obs.flatten()[:self.env.config.vms] == -1)
                 if i_vm.nelement() > 0:
                     i_vm = i_vm[0].item()
                 else:
                     i_vm = None
                 _, envaction = self._convert_action(previous_obs, i_vm, action)
-                print(envaction)
                 obs, reward, terminated, truncated, info = self.env.step(envaction.numpy())
                 done = terminated or truncated
 
                 fraction = min(i_episode / self.config.episodes, 1.0)
-                self.beta = self.beta + fraction * (1.0 - self.beta)
+                self.beta = self.config.beta + fraction * (1.0 - self.config.beta)
 
-                self.transition += [reward, obs, done]
+                self.transition = [previous_obs, action, reward, obs, done]
                 if self.use_n_step:
                     one_step_transition = self.memory_n.store(*self.transition)
                 else:
@@ -481,21 +473,18 @@ class CaviglioneAgent(Base):
                 if one_step_transition:
                     self.memory.store(*one_step_transition)
 
-                if len(self.memory) >= self.batch_size:
+                if len(self.memory) >= self.config.batch_size:
                     loss = self._optimize_model()
                     if self.writer and loss: 
                         self.writer.add_scalar('Training/loss', loss, step)
                     update_cnt += 1
-                    if update_cnt % self.target_update == 0:
+                    if update_cnt % self.config.target_update == 0:
                         self._target_hard_update()
 
                 previous_obs = obs
-                current_ep_reward += reward.item()  # For logging
+                current_ep_reward += reward  # For logging
                 step += 1
 
-            # Update the target network, copying all weights and biases in DQN
-            if i_episode % self.config.target_update == 0:
-                self.target_net.load_state_dict(self.policy_net.state_dict())
             ep_returns[i_episode] = current_ep_reward
 
             if self.writer: 
@@ -508,20 +497,22 @@ class CaviglioneAgent(Base):
         for r in range(ep_returns.size):
             ep_returns_median[r] = np.median(ep_returns[r-return_factor:r])
 
-    def act(self, observation: np.ndarray):
-        vm_placement = observation[:self.env.config.vms].astype(int)
-        waiting_vms = np.argwhere(vm_placement == -1)
+    def act(self, observation: np.ndarray) -> np.ndarray:
+        observation = torch.from_numpy(observation).float().to(self.device)
+        vm_placement = observation[:self.env.config.vms]
+        waiting_vms = np.argwhere(vm_placement == -1).flatten()
+        action = vm_placement + 1
         for i in waiting_vms:
             choice = self._select_action(observation)
             observation, action = self._convert_action(observation, i, choice)
-        return action
+        return action.numpy().astype(int)
 
-    def _select_action(self, observation: np.ndarray) -> torch.Tensor:
-        return self.dqn(torch.FloatTensor(observation).to(self.device)).argmax()
+    def _select_action(self, observation: torch.Tensor) -> torch.Tensor:
+        return self.dqn(observation).argmax()
 
-    def _convert_action(self, observation: torch.Tensor, v: int, choice: int) -> torch.Tensor:
+    def _convert_action(self, observation: torch.Tensor, v: int, choice: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if v is None:
-            vm_placement = observation[:self.env.config.vms].to(torch.int)
+            vm_placement = observation[:self.env.config.vms].to(int)
             action = vm_placement + 1
         elif (choice.item() == 0): # first fit
             observation, action = self._get_firstfit_action(observation, v)
@@ -531,17 +522,16 @@ class CaviglioneAgent(Base):
             observation, action = self._get_dot_action(observation, v)
         else: 
             raise ValueError("Invalid choice")
-
         return observation, action
 
-    def _get_firstfit_action(self, observation: torch.Tensor, v: int) -> torch.Tensor:
-        obsdict = self.env.convert_obs_to_dict(observation.detach().numpy())
+    def _get_firstfit_action(self, observation: torch.Tensor, v: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        obsdict = convert_obs_to_dict(self.env.config, observation)
         vm_placement = obsdict["vm_placement"]
         cpu = obsdict["cpu"]
         memory = obsdict["memory"]
         vm_cpu = obsdict["vm_cpu"]
         vm_memory = obsdict["vm_memory"]
-        action = vm_placement.copy()
+        action = vm_placement.clone()
 
         for p in range(len(cpu)): 
             if cpu[p] + vm_cpu[v] <= 1 and memory[p] + vm_memory[v] <= 1:
@@ -550,35 +540,35 @@ class CaviglioneAgent(Base):
                 break
 
         action += 1 # first status is waiting
-        observation = np.hstack([vm_placement, vm_cpu, vm_memory, cpu, memory])
+        observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
 
-    def _get_norm2_action(self, observation: torch.Tensor, v: int) -> torch.Tensor:
-        obsdict = self.env.convert_obs_to_dict(observation.detach().numpy())
+    def _get_norm2_action(self, observation: torch.Tensor, v: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        obsdict = convert_obs_to_dict(self.env.config, observation)
         vm_placement = obsdict["vm_placement"]
         cpu = obsdict["cpu"]
         memory = obsdict["memory"]
         vm_cpu = obsdict["vm_cpu"]
         vm_memory = obsdict["vm_memory"]
-        action = vm_placement.copy()
+        action = vm_placement.clone()
 
-        norms = np.zeros(len(cpu))
+        norms = torch.zeros(len(cpu))
         for p in range(len(cpu)): 
             norms[p] = torch.norm(torch.tensor([cpu[p], memory[p]]) - torch.tensor([vm_cpu[v], vm_memory[v]]))
         
         action[v] = torch.argmin(norms)
         action += 1 # first status is waiting
-        observation = np.hstack([vm_placement, vm_cpu, vm_memory, cpu, memory])
+        observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
     
-    def _get_dot_action(self, observation: torch.Tensor, v: int) -> torch.Tensor:
-        obsdict = self.env.convert_obs_to_dict(observation.detach().numpy())
+    def _get_dot_action(self, observation: torch.Tensor, v: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        obsdict = convert_obs_to_dict(self.env.config, observation)
         vm_placement = obsdict["vm_placement"]
         cpu = obsdict["cpu"]
         memory = obsdict["memory"]
         vm_cpu = obsdict["vm_cpu"]
         vm_memory = obsdict["vm_memory"]
-        action = vm_placement.copy()
+        action = vm_placement.clone()
 
         dotproducts = torch.zeros(len(cpu))
         for p in range(len(cpu)):
@@ -586,7 +576,7 @@ class CaviglioneAgent(Base):
 
         action[v] = torch.argmin(dotproducts)
         action += 1 # first status is waiting
-        observation = np.hstack([vm_placement, vm_cpu, vm_memory, cpu, memory])
+        observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
     
     def _optimize_model(self) -> torch.Tensor:
@@ -641,26 +631,26 @@ class CaviglioneAgent(Base):
         done = torch.FloatTensor(samples["done"].reshape(-1, 1)).to(device)
         
         # Categorical DQN algorithm
-        delta_z = float(self.v_max - self.v_min) / (self.atom_size - 1)
+        delta_z = float(self.config.v_max - self.config.v_min) / (self.config.atom_size - 1)
 
         with torch.no_grad():
             # Double DQN
             next_action = self.dqn(next_state).argmax(1)
             next_dist = self.dqn_target.dist(next_state)
-            next_dist = next_dist[range(self.batch_size), next_action]
+            next_dist = next_dist[range(self.config.batch_size), next_action]
 
             t_z = reward + (1 - done) * gamma * self.support
-            t_z = t_z.clamp(min=self.v_min, max=self.v_max)
-            b = (t_z - self.v_min) / delta_z
+            t_z = t_z.clamp(min=self.config.v_min, max=self.config.v_max)
+            b = (t_z - self.config.v_min) / delta_z
             l = b.floor().long()
             u = b.ceil().long()
 
             offset = (
                 torch.linspace(
-                    0, (self.batch_size - 1) * self.atom_size, self.batch_size
+                    0, (self.config.batch_size - 1) * self.config.atom_size, self.config.batch_size
                 ).long()
                 .unsqueeze(1)
-                .expand(self.batch_size, self.atom_size)
+                .expand(self.config.batch_size, self.config.atom_size)
                 .to(self.device)
             )
 
@@ -673,7 +663,7 @@ class CaviglioneAgent(Base):
             )
 
         dist = self.dqn.dist(state)
-        log_p = torch.log(dist[range(self.batch_size), action])
+        log_p = torch.log(dist[range(self.config.batch_size), action])
         elementwise_loss = -(proj_dist * log_p).sum(1)
 
         return elementwise_loss
