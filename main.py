@@ -5,7 +5,9 @@ from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent, FirstFitConfig
 from src.agents.ppolstm import RecurrentPPOAgent, RecurrentPPOConfig
 from src.agents.dqn import DQNAgent, DQNConfig
+from src.agents.pposb import PPOSBAgent, PPOSBConfig
 from src.agents.rainbow import RainbowAgent, RainbowConfig
+from src.agents.convex import ConvexAgent, ConvexConfig
 from src.vm_gym.envs.env import EnvConfig
 from src.record import Record
 import gymnasium as gym
@@ -52,8 +54,10 @@ def run(args: Args) -> Record:
         agent = CaviglioneAgent(env, CaviglioneConfig(**training_config))
     elif args.agent == "ppo":
         agent = PPOAgent(env, PPOConfig(**training_config))
+    elif args.agent == "convex":
+        agent = ConvexAgent(env, ConvexConfig(**training_config))
     elif args.agent == "ppolstm":
-        agent = RecurrentPPOAgent(env, RecurrentPPOConfig(**training_config))
+        agent = RecurrentPPOAgent(env, RecurrentPPOConfig(**training_config), args.logdir)
     elif args.agent == "firstfit":
         agent = FirstFitAgent(env, FirstFitConfig(**training_config))
     elif args.agent == "bestfit":
@@ -91,7 +95,7 @@ def run(args: Args) -> Record:
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "dqn", "firstfit", "bestfit", "ppolstm", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
+    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "dqn", "firstfit", "bestfit", "ppolstm", "convex", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/r2.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")

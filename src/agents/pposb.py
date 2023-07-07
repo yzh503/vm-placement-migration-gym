@@ -1,22 +1,22 @@
 from src.agents.base import Base
-from sb3_contrib import RecurrentPPO
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
 from dataclasses import dataclass
 
 @dataclass
-class RecurrentPPOConfig:
+class PPOSBConfig:
     episodes: int = 2000
     progress_bar: bool = True
     learning_rate: float = 3e-5
     batch_size: int = 100
     ent_coef: float = 0.01
-    lstm_hidden_size: int = 256
-    n_lstm_layers: int = 1
+    hidden_size: int = 256
     device: str = "cpu"
 
-class RecurrentPPOAgent(Base):
+class PPOSBAgent(Base):
     def __init__(self, env, config, tensorboard_log):
         super().__init__(type(self).__name__, env, config)
-        self.model = RecurrentPPO(policy="MlpLstmPolicy",
+        self.model = PPO(policy="MlpPolicy",
                                   env=env, 
                                   tensorboard_log=tensorboard_log,
                                   ent_coef=self.config.ent_coef,
@@ -24,7 +24,8 @@ class RecurrentPPOAgent(Base):
                                   n_steps=self.env.config.training_steps, 
                                   learning_rate=self.config.learning_rate, 
                                   device=self.config.device,
-                                  policy_kwargs=dict(lstm_hidden_size=self.config.lstm_hidden_size, n_lstm_layers=self.config.n_lstm_layers))
+                                  policy_kwargs=dict(net_arch=[dict(pi=[self.config.hidden_size, self.config.hidden_size], 
+                                                                    vf=[self.config.hidden_size, self.config.hidden_size])]))
 
         self.lstm_states = None
         
@@ -33,12 +34,11 @@ class RecurrentPPOAgent(Base):
                          progress_bar=self.config.progress_bar)
 
     def load_model(self, modelpath):
-        self.model = RecurrentPPO.load(modelpath)
+        self.model = PPO.load(modelpath)
 
     def save_model(self, modelpath):
         self.model.save(modelpath)
 
     def act(self, observation):
-        action, lstm_states = self.model.predict(observation, state=self.lstm_states, deterministic=False)
-        self.lstm_states = lstm_states
+        action, _ = self.model.predict(observation)
         return action

@@ -132,13 +132,7 @@ class VmEnv(gym.Env):
             else:
                 reward = - kl_divergence(target,current).item()      
         elif self.config.reward_function == "utilisation": 
-            cpu_rate = self.cpu[self.cpu >= 0]
-            memory_rate = self.memory[self.memory >= 0]
-
-            if cpu_rate.size > 0 or memory_rate.size > 0: 
-                reward = self.config.beta * np.mean(cpu_rate) + (1 - self.config.beta) * np.mean(memory_rate)
-            else:
-                reward = 0.0
+            reward = self.config.beta * np.sum(self.cpu) + (1 - self.config.beta) * np.sum(self.memory)
         elif self.config.reward_function == "waiting_ratio":
             reward = - self.waiting_ratio 
         elif self.config.reward_function == "waiting_time":
@@ -168,7 +162,7 @@ class VmEnv(gym.Env):
         self.rng3 = np.random.default_rng(seed+2)
         self.rng4 = np.random.default_rng(seed+3)
 
-    def reset(self, seed: Optional[int] = None):
+    def reset(self, seed: Optional[int] = None, options=None):
         super().reset(seed=seed)
         self.seed(seed)
         # Observable

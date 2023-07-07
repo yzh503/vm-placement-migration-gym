@@ -102,7 +102,7 @@ class MlpShared(nn.Module):
         return self.critic(self.shared_network(obs))
 
     def get_action(self, obs, action=None):
-        logits = self.actor(self.shared_network(obs)).unsqueeze(0)
+        logits = self.actor(self.shared_network(obs))
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
@@ -141,7 +141,7 @@ class MlpSeparate(nn.Module):
         return self.critic(obs)
 
     def get_action(self, obs, action=None):
-        logits = self.actor(obs).unsqueeze(0)
+        logits = self.actor(obs)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
@@ -181,7 +181,7 @@ class MlpCont(nn.Module):
         return self.critic(obs)
 
     def get_action(self, obs, actions=None):
-        action_means = self.actor_means(obs).unsqueeze(0)
+        action_means = self.actor_means(obs)
         action_logstds = self.actor_logstds.expand_as(action_means)
         action_stds = torch.exp(action_logstds)
         probs = Normal(action_means, action_stds)
@@ -212,7 +212,7 @@ class PPOAgent(Base):
 
 
     def act(self, obs: np.ndarray) -> np.ndarray:
-        obs = torch.from_numpy(obs).float().to(self.config.device)
+        obs = torch.from_numpy(obs).float().to(self.config.device).unsqueeze(0) # a batch of size 1
         if self.config.det:
             action = self.model.get_det_action(obs)
         else:
@@ -249,19 +249,19 @@ class PPOAgent(Base):
 
         for i_episode in pbar:
             current_ep_reward = 0
-            obs, _ = self.env.reset(self.env.config.seed + i_episode)
+            obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
             obs = torch.from_numpy(obs).float().to(self.config.device)
             done = False
             while not done:
-                action, logprob, _ = self.model.get_action(obs)
+                action, logprob, _ = self.model.get_action(obs.unsqueeze(0)) # pass in a batch of size 1
                 action = torch.flatten(action)
                 next_obs, reward, done, truncated, info = self.env.step(action.cpu().numpy())
                 next_obs = torch.from_numpy(next_obs).float().to(self.config.device)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
 
                 action_batch[i_batch] = action
-                obs_batch[i_batch] = torch.flatten(obs)
-                next_obs_batch[i_batch] = torch.flatten(next_obs)
+                obs_batch[i_batch] = obs
+                next_obs_batch[i_batch] = next_obs
                 logprob_batch[i_batch] = logprob.item()
                 rewards_batch[i_batch] = reward_t
                 done_batch[i_batch] = done
