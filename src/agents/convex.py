@@ -86,9 +86,11 @@ class ConvexAgent(Base):
                 else:
                     rows_formatted.append(row[cols_to_optimize])
 
+            if variable_row is None: 
+                break
+
             X = cvx.bmat(rows_formatted)
-            ones = np.ones(cols).reshape(1, -1)
-            constraints = [0 <= X, X <= 1, ones @ X[variable_row, :].T == 1, A @ X <= 1, B @ X <= 1]
+            constraints = [0 <= X, X <= 1, cvx.sum(X[variable_row, :]) == 1, A @ X <= 1, B @ X <= 1]
             objective = cvx.Minimize(cvx.norm(X, 'nuc'))
 
             prob = cvx.Problem(objective, constraints)
@@ -111,6 +113,7 @@ class ConvexAgent(Base):
             # X[6] = array([1., 0., 0.]), which means VM 6 is placed on PM 5
             # However, 
             if prob.status != cvx.OPTIMAL:
+                #print("No solution on VM", variable_row)
                 rows_to_optimize[variable_row] = False
                 continue
             # if prob.status != cvx.OPTIMAL:
@@ -138,7 +141,6 @@ class ConvexAgent(Base):
             """
 
             X_full = M[vm_placement > -2]
-            X_final = M[vm_placement > -2]
             X_opt = np.array(X.value)
 
             # Algorithm 2: VM Deployement 
@@ -152,18 +154,19 @@ class ConvexAgent(Base):
                     p_full = available_pms[p]
                     X_full[v, p_full] = 1
 
-
                     overloaded = np.logical_or(A @ X_full > 1, B @ X_full > 1)
                     if overloaded.any(): 
+                        #print("Overloaded: ", v, p_full, X_full)
                         cols_to_optimize[p_full] = False
                         X_opt = np.delete(X_opt, p, axis=1)
+                        X_full[v, :] = M[vm_placement > -2][v, p_full]
                     else: 
+                        #print("Underloaded: ", v, p_full, X_full)
                         rows_optimized.append((v, X_full[v]))
                         rows_to_optimize[v] = False
-                        X_final[v, :] = X_full[v, :]
 
             M[vm_placement > -2] = X_full[:]
-            
+        
         for v, row in rows_optimized: 
             pm = np.argwhere(row == 1).flatten() # pm is the index of available PMs
             if pm.size == 1:
