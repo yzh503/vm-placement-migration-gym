@@ -70,22 +70,41 @@ class ConvexAgent(Base):
         while np.count_nonzero(rows_to_optimize) > 0 and np.count_nonzero(cols_to_optimize) > 0:
             cols = np.count_nonzero(cols_to_optimize)
             rows_formatted = []
+            rows_var = []
             for i, row in enumerate(M[vm_placement > -2]): 
                 if rows_to_optimize[i]:
                     Z = cvx.Variable((1, cols))
                     Z.value = row[cols_to_optimize].reshape(1, -1)
                     rows_formatted.append(Z)
+                    rows_var.append(True)
                 else:
                     rows_formatted.append(row[cols_to_optimize])
+                    rows_var.append(False)
+
+
             X = cvx.bmat(rows_formatted)
-            print(X.value)
             ones = np.ones(cols).reshape(1, -1)
-            constraints = [0 <= X, X <= 1, ones @ X.T == 1, A @ X <= 1, B @ X <= 1]
+            constraints = [0 <= X, X <= 1, ones @ X[rows_var].T == 1, A @ X <= 1, B @ X <= 1]
             objective = cvx.Minimize(cvx.norm(X, 'nuc'))
 
             prob = cvx.Problem(objective, constraints)
             prob.solve(solver=cvx.CVXOPT)
+            if prob.status != cvx.OPTIMAL:
+                break # In some cases there is no solution. For example, 
+            """
+            X = | 0. 1. |
+                | 0. 0. |
+                | 0. 0. |
+                | Z1    |
+                | Z2    |
+                | Z3    |
+                | Z4    |
+                | Z5    |
+            """
+
             assert prob.status == cvx.OPTIMAL, prob.status
+
+
 
             X_full = M[vm_placement > -2]
             X_opt = np.array(X.value)
@@ -96,7 +115,7 @@ class ConvexAgent(Base):
                     p = np.argmax(row).flatten()[0]
                     X_full[v, :] = 0
                     available_pms = np.argwhere(cols_to_optimize == True).flatten()
-                    if available_pms.size == 0:
+                    if available_pms.size <= p:
                         break
                     p_full = available_pms[p]
                     X_full[v, p_full] = 1
