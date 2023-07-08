@@ -7,6 +7,7 @@ from src.vm_gym.envs.env import VmEnv
 
 @dataclass
 class ConvexConfig: 
+    migration_penalty: float = 0.1
     pass
 
 class ConvexAgent(Base):
@@ -88,10 +89,18 @@ class ConvexAgent(Base):
 
             if variable_row is None: 
                 break
-
+            
+            # X is a binary matrix of shape V * P, where V is the number of VMs and P is the number of servers
+            # R is resource matrix of shape 2 * P, where P is the number of servers
+            # cvx.multiply(M[vm_placement > -2], 1 - X) @ onesn represents if corresponding VM was initially placed on one server and finally re-placed on another server. 
+            # onesm @ cvx.multiply(M[vm_placement > -2], 1 - X) @ onesn is the total number of VM migration requests.
+            R = np.concatenate((A, B), axis=1)
             X = cvx.bmat(rows_formatted)
+            onesm = np.ones(shape=(1, X.shape[0]))
+            onesn = np.ones(shape=(1, X.shape[1]))
             constraints = [0 <= X, X <= 1, cvx.sum(X[variable_row, :]) == 1, A @ X <= 1, B @ X <= 1]
-            objective = cvx.Minimize(cvx.norm(X, 'nuc'))
+            objective = cvx.Minimize(cvx.norm(X, 'nuc') + self.config.migration_penalty * onesm @ (cvx.multiply(M[vm_placement > -2][:, cols_to_optimize], 1 - X)) @ onesn.T)
+            # (cvx.multiply(M[vm_placement > -2], 1 - X)) @ onesn has shape 1,P
 
             prob = cvx.Problem(objective, constraints)
             prob.solve(solver=cvx.CVXOPT)
