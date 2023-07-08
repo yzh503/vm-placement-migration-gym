@@ -54,43 +54,33 @@ class ConvexAgent(Base):
             return vm_placement
         
         P = self.env.config.pms
+        A = A[vm_placement > -2].reshape(1, -1)
+        B = B[vm_placement > -2].reshape(1, -1)
 
         M = np.zeros(shape=(self.env.config.vms, self.env.config.pms))
         for i, pm in enumerate(vm_placement):
             if pm > -1:
                 M[i, pm] = 1 
         
-        unavailable_pms = np.zeros(P, dtype=bool)
+        cols_to_optimize = np.ones(P, dtype=bool)
         rows_to_optimize = vm_placement > -2 # variable rows
         rows_optimized = []
 
         i = 0
-        while np.count_nonzero(rows_to_optimize) > 0 and np.count_nonzero(unavailable_pms) < P:
+        while np.count_nonzero(rows_to_optimize) > 0 and np.count_nonzero(cols_to_optimize) > 0:
+            cols = np.count_nonzero(cols_to_optimize)
             rows_formatted = []
-            row_variable = []
             for i, row in enumerate(M[vm_placement > -2]): 
                 if rows_to_optimize[i]:
-                    Z = cvx.Variable((1, P))
-                    Z.value = row.reshape(1, -1)
+                    Z = cvx.Variable((1, cols))
+                    Z.value = row[cols_to_optimize].reshape(1, -1)
                     rows_formatted.append(Z)
-                    row_variable.append(True)
                 else:
-                    rows_formatted.append(row)
-                    row_variable.append(False)
-
+                    rows_formatted.append(row[cols_to_optimize])
             X = cvx.bmat(rows_formatted)
-            ones = np.ones(P).reshape(1, -1)
-            
-            mask = np.zeros_like(X.value, dtype=bool)
-            mask[np.ix_(np.array(row_variable), unavailable_pms)] = 1
-
-            constraints = [0 <= X, 
-                        X <= 1, 
-                        ones @ X.T == 1, 
-                        A[vm_placement > -2] @ X <= 1, 
-                        B[vm_placement > -2] @ X <= 1,
-                        cvx.multiply(X, mask) == 0]
-            
+            print(X.value)
+            ones = np.ones(cols).reshape(1, -1)
+            constraints = [0 <= X, X <= 1, ones @ X.T == 1, A @ X <= 1, B @ X <= 1]
             objective = cvx.Minimize(cvx.norm(X, 'nuc'))
 
             prob = cvx.Problem(objective, constraints)
@@ -105,10 +95,14 @@ class ConvexAgent(Base):
                 if rows_to_optimize[v]:
                     p = np.argmax(row).flatten()[0]
                     X_full[v, :] = 0
-                    X_full[v, p] = 1
-                    overloaded = np.logical_or(A[vm_placement > -2] @ X_full > 1, B[vm_placement > -2] @ X_full > 1)
+                    available_pms = np.argwhere(cols_to_optimize == True).flatten()
+                    if available_pms.size == 0:
+                        break
+                    p_full = available_pms[p]
+                    X_full[v, p_full] = 1
+                    overloaded = np.logical_or(A @ X_full > 1, B @ X_full > 1)
                     if np.count_nonzero(overloaded) > 0: 
-                        unavailable_pms[p] = True
+                        cols_to_optimize[p_full] = False
                         X_opt = np.delete(X_opt, p, axis=1)
                     else: 
                         rows_optimized.append((v, X_full[v]))
