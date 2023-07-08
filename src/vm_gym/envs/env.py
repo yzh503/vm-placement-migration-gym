@@ -39,7 +39,10 @@ class VmEnv(gym.Env):
         print("Environment initialized with config: ", self.config)
 
     def _placement_valid(self, pm, vm):
-        return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
+        if pm == -1: 
+            return True 
+        else:
+            return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
 
     def _free_pm(self, pm, vm):
         self.cpu[pm] -= self.vm_cpu[vm]
@@ -61,7 +64,6 @@ class VmEnv(gym.Env):
             action_valid = action_valid and not (current_pm == move_to_pm)                               # No same spot moving
             action_valid = action_valid and not (current_pm > WAIT_STATUS and move_to_pm > WAIT_STATUS)  # No direct swap
             action_valid = action_valid and self._placement_valid(move_to_pm, vm)        # PM has to be available
-
             actions_valid[vm] = int(action_valid)
 
             if action_valid: 
