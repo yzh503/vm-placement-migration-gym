@@ -6,12 +6,12 @@ import cvxpy as cvx
 from src.vm_gym.envs.env import VmEnv
 
 @dataclass
-class ConvexAllConfig: 
-    migration_penalty: float = 10000
+class ConvexConfig: 
+    migration_penalty: float = 1
     pass
 
-class ConvexAllAgent(Base):
-    def __init__(self, env: VmEnv, config: ConvexAllConfig):
+class ConvexAgent(Base):
+    def __init__(self, env: VmEnv, config: ConvexConfig):
         super().__init__(type(self).__name__, env, config)
         self.queue = []  # introduce a queue to store operations
         
@@ -60,7 +60,6 @@ class ConvexAllAgent(Base):
             return vm_placement
         
         P = self.env.config.pms
-        V = self.env.config.vms
         A = A[vm_placement > -2].reshape(1, -1)
         B = B[vm_placement > -2].reshape(1, -1)
 
@@ -68,27 +67,27 @@ class ConvexAllAgent(Base):
         for i, pm in enumerate(vm_placement):
             if pm > -1:
                 M[i, pm] = 1 
-        
+
         cols_to_optimize = np.ones(P, dtype=bool)
         rows_to_optimize = vm_placement > -2 # variable rows
         rows_optimized = []
 
         i = 0
-        while rows_to_optimize.any() and cols_to_optimize.any():
+        while np.count_nonzero(rows_to_optimize) > 0 and np.count_nonzero(cols_to_optimize) > 0:
             cols = np.count_nonzero(cols_to_optimize)
             rows_formatted = []
             # find the first -1 
-            variable_rows = [] # only has 1 variable row, becuase multiple variable rows may get stuck in non-existence of solution
+            variable_row = None # only has 1 variable row, becuase multiple variable rows may get stuck in non-existence of solution
             for i, row in enumerate(M[vm_placement > -2]): 
-                if rows_to_optimize[i]:
+                if rows_to_optimize[i] and variable_row is None:
                     Z = cvx.Variable((1, cols))
                     Z.value = row[cols_to_optimize].reshape(1, -1)
                     rows_formatted.append(Z)
-                    variable_rows.append(i)
+                    variable_row = i
                 else:
                     rows_formatted.append(row[cols_to_optimize])
 
-            if len(variable_rows) == 0:
+            if variable_row is None: 
                 break
             
             # X is a binary matrix of shape V * P, where V is the number of VMs and P is the number of servers
@@ -99,40 +98,45 @@ class ConvexAllAgent(Base):
             X = cvx.bmat(rows_formatted)
             onesm = np.ones(shape=(1, X.shape[0]))
             onesn = np.ones(shape=(1, X.shape[1]))
-            constraints = [0 <= X, X <= 1, cvx.sum(X[variable_rows]) == 1, A @ X <= 1, B @ X <= 1]
+            constraints = [0 <= X, X <= 1, cvx.sum(X[variable_row, :]) == 1, A @ X <= 1, B @ X <= 1]
             objective = cvx.Minimize(cvx.norm(X, 'nuc') + self.config.migration_penalty * onesm @ (cvx.multiply(M[vm_placement > -2][:, cols_to_optimize], 1 - X)) @ onesn.T)
             # (cvx.multiply(M[vm_placement > -2], 1 - X)) @ onesn has shape 1,P
 
             prob = cvx.Problem(objective, constraints)
-            try: 
-                prob.solve(solver=cvx.SCS)
-            except cvx.SolverError:
-                print("SolverError")
-                break
-
-            # if prob.status != cvx.OPTIMAL:
-            #     #print("No solution on VM", variable_row)
-            #     rows_to_optimize[variable_row] = False
-            #     continue
+            prob.solve(solver=cvx.CVXOPT)
+            # Timestep: 		47
+            # VM request: 		1, dropped: 0
+            # VM placement: 		[ 8  1  8  9  6  4  7 -1 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 -2]
+            # VM suspended: 		[0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+            # CPU (%): 		[ 0 34  0  0 92  0 83 65 81 11] 3.66
+            # Memory (%): 		[ 0 96  0  0 48  0 38 84 79 95] 4.4
+            # VM CPU (%): 		[67 34 14 11 83 92 65 76  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0] 4.42
+            # VM Memory (%): 		[56 96 23 95 38 48 84 47  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0] 4.87
+            # VM waiting time: 	[2 5 0 0 0 0 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+            # VM planned runtime: 	[ 84 111  85 100 108  98  99  94   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0]
+            # VM remaining runtime: 	[57 92 63 83 92 86 93 94  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0]
+            
+            # column 5 8 9 are available PMs, 
+            # VM 7 should be placed on PM 5, 
+            # However, VM 7 is skipped
+            # X[6] = array([1., 0., 0.]), which means VM 6 is placed on PM 5
+            # However, 
             if prob.status != cvx.OPTIMAL:
-                #print("No solution on VM ", variable_rows)
-                # Reduce the rows to optimise. Reduce the placed VMs first.
-                if len(variable_rows) == 1: 
-                    rows_to_optimize[variable_rows[0]] = False
-                    continue
-
-                migratable_reduced = np.logical_and(rows_to_optimize == True, vm_placement > -1)
-                placable_reduced = np.logical_and(rows_to_optimize == True, vm_placement == -1)
-                if migratable_reduced.any():
-                    reduced = np.where(migratable_reduced)[0][0]
-                    rows_to_optimize[reduced] = False
-                    #print("Migratable reduced:", reduced)
-                elif placable_reduced.any():
-                    reduced = np.where(placable_reduced)[0][0]
-                    rows_to_optimize[reduced] = False
-                    #print("Placable reduced:", reduced)
-
+                #print("No solution on VM", variable_row)
+                rows_to_optimize[variable_row] = False
                 continue
+            # if prob.status != cvx.OPTIMAL:
+            #     # Reduce the rows to optimise. Reduce the placed VMs first.
+            #     to_disable = np.logical_and(rows_to_optimize == True, vm_placement > -1)
+            #     last_rows_to_optimize = np.argwhere(to_disable == True).flatten()
+            #     if last_rows_to_optimize.size == 0:
+            #         print("cannot reduce: ", rows_to_optimize)
+            #         break
+            #     else: 
+            #         last_row_to_optimize = last_rows_to_optimize[-1]
+            #         rows_to_optimize[last_row_to_optimize] = False
+            #         print("reduced: ", rows_to_optimize)
+            #         continue 
             # In some cases there is no solution. For example, if there are too many variable rows and not enough PMs
             """
             X = | 0. 1. |

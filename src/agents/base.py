@@ -137,3 +137,4 @@ class Base:
         self.record.total_memory_requested = info['total_memory_requested']
         self.record.suspended.append(info['suspend_actions'])
         self.record.placed.append(info['place_actions'])
+        self.record.rank.append(info['rank'])

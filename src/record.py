@@ -28,6 +28,7 @@ class Record:
         self.suspended = list[int]() # suspend actions
         self.placed = list[int]() # place actions
         self.vmsratio = list[float]() # ratio of used vms slot
+        self.rank = list[float]() # rank of the placement matrix
 
     @property
     def unique_vms_placement(self):
@@ -130,12 +131,13 @@ class Record:
             'median slowdown': np.round(np.median(self.slowdown_rates), 3), 
             'max slowdown': np.round(np.max(self.slowdown_rates), 3),
             'drop rate': np.round(np.mean(self.drop_rate), 3),
-            'cpu mean (second half)': np.round(np.mean(self.cpu[len(self.cpu)//2:]), 3),
-            'cpu mean target (second half)': np.round(np.mean(self.target_cpu_mean[len(self.target_cpu_mean)//2:]), 3),
-            'cpu std (second half)': np.round(np.std(self.cpu[len(self.cpu)//2:]), 3),
-            'memory mean (second half)': np.round(np.mean(self.memory[len(self.memory)//2:]), 3),
-            'memory mean target (second half)': np.round(np.mean(self.target_memory_mean[len(self.target_memory_mean)//2:]), 3),
-            'memory std (second half)': np.round(np.std(self.memory[len(self.memory)//2:]), 3),
+            'cpu mean': np.round(np.mean(self.cpu), 3),
+            'cpu mean target': np.round(np.mean(self.target_cpu_mean), 3),
+            'cpu std': np.round(np.std(self.cpu), 3),
+            'memory mean': np.round(np.mean(self.memory), 3),
+            'memory mean target': np.round(np.mean(self.target_memory_mean), 3),
+            'memory std': np.round(np.std(self.memory), 3),
+            'rank mean': np.round(np.mean(self.rank), 3),
         }
     
     def save(self, path: str):
@@ -165,6 +167,7 @@ class Record:
         record.served_requests = jsondict['served_requests']
         record.total_cpu_requested = jsondict['total_cpu_requested']
         record.total_memory_requested = jsondict['total_memory_requested']
+        record.rank = jsondict['rank']
         record.suspended = jsondict['suspended']
         if 'placed' in jsondict:
             record.placed = jsondict['placed']

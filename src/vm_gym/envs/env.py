@@ -306,4 +306,12 @@ class VmEnv(gym.Env):
             "target_memory_mean": self.target_memory_mean,
             'total_cpu_requested': self.total_cpu_requested,
             'total_memory_requested': self.total_memory_requested,
+            'rank': self._get_rank(),
         }
+
+    def _get_rank(self):
+        M = np.zeros(shape=(self.config.vms, self.config.pms))
+        for i, pm in enumerate(self.vm_placement):
+            if pm > -1:
+                M[i, pm] = 1 
+        return np.linalg.matrix_rank(M)
