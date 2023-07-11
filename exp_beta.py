@@ -11,7 +11,7 @@ def evaluate_beta(betas, evalmode):
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.episodes
+    config['environment']['eval_steps'] = exp.eval_steps
     if evalmode: 
         config['environment']['service_length'] = exp.service_length
         config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)

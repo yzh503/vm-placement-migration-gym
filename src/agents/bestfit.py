@@ -31,7 +31,7 @@ class BestFitAgent(Base):
         action = np.copy(vm_placement)
 
         for v in range(self.env.config.vms):
-            if vm_placement[v] == -1:  
+            if vm_placement[v] == self.env.config.pms:  
                 for best_pm in np.flip(np.argsort(cpu + memory)): 
                     valid = cpu[best_pm] + vm_cpu[v] <= 1 and memory[best_pm] + vm_memory[v] <= 1
                     if valid: 
@@ -40,5 +40,4 @@ class BestFitAgent(Base):
                         memory[best_pm] += vm_memory[v]
                         break
 
-        action += 1 # first status is waiting
         return action

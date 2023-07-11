@@ -16,7 +16,7 @@ def evaluate_seeds(args, results):
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.episodes
+    config['environment']['eval_steps'] = exp.eval_steps
     config['environment']['reward_function'] = "utilisation"
     config['environment']['service_length'] = exp.service_length
     config['environment']['sequence'] = "uniform"
@@ -83,9 +83,9 @@ def evaluate_seeds(args, results):
     memory_mean_multitests = np.mean(memory, axis=2)
     memory_var = np.var(memory, axis=0)
     
-    results['agent'] += [agent] * exp.episodes
-    results['load'] += [load] * exp.episodes
-    results['step'] += np.arange(1, exp.episodes + 1, 1, dtype=int).tolist()
+    results['agent'] += [agent] * exp.eval_steps
+    results['load'] += [load] * exp.eval_steps
+    results['step'] += np.arange(1, exp.eval_steps + 1, 1, dtype=int).tolist()
     results['cpu_mean'] += np.mean(cpu_mean_multitests, axis=0).tolist()
     results['cpu_var'] += cpu_var.tolist()
     results['memory_mean'] += np.mean(memory_mean_multitests, axis=0).tolist()
@@ -93,7 +93,7 @@ def evaluate_seeds(args, results):
     results['served'] += served_reqs.tolist()
     results['suspended'] += np.mean(suspended, axis=0).tolist()
     results['waiting_ratio'] += np.mean(waiting_ratios, axis=0).tolist()
-    results['slowdown_rates'] += [np.mean(slowdown_rates)] * exp.episodes
+    results['slowdown_rates'] += [np.mean(slowdown_rates)] * exp.eval_steps
 
     to_print = '%s,' % (agent) 
     to_print += '%.2f,' % (load) 
@@ -121,12 +121,20 @@ if __name__ == '__main__':
     
     to_print += evaluate_seeds(('firstfit', None, exp.load), results)
     to_print += evaluate_seeds(('bestfit', None, exp.load), results)
+    to_print += evaluate_seeds(('convexrankall', None, exp.load), results)
     to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r2.pt', exp.load), results)
     to_print += evaluate_seeds(('ppo', 'weights/ppo-r2.pt', exp.load), results)
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r2.pt', exp.load), results)
+    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r2.pt', exp.load), results)
+
 
     to_print += evaluate_seeds(('firstfit', None, 0.75), results)
     to_print += evaluate_seeds(('bestfit', None, 0.75), results)
+    to_print += evaluate_seeds(('convexrankall', None, 0.75), results)
     to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r2-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-r2-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r2-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r2-low.pt', 0.75), results)
     
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')

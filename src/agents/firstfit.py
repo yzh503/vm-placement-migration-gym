@@ -31,12 +31,11 @@ class FirstFitAgent(Base):
         action = np.copy(vm_placement)
 
         for v in range(self.env.config.vms):
-            if vm_placement[v] == -1: 
+            if vm_placement[v] == self.env.WAIT_STATUS: 
                 for p in range(len(cpu)): 
                     if cpu[p] + vm_cpu[v] <= 1 and memory[p] + vm_memory[v] <= 1:
                         action[v] = p # first status is waiting 
                         cpu[p] += vm_cpu[v]
                         break
 
-        action += 1 # first status is waiting
         return action

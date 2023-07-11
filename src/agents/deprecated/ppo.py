@@ -13,10 +13,9 @@ import gymnasium
 from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSampler
 @dataclass
 class PPOConfig:
+    migration_rate: float = 0.01
     episodes: int = 2000
     hidden_size: int = 256
-    migration_discount: float = 0.2
-    masked: bool = True
     lr: float = 3e-5
     lr_lambda: float = 1
     gamma: float = 0.99 # GAE parameter
@@ -35,6 +34,8 @@ class PPOConfig:
     reward_scaling: bool = False
     training_progress_bar: bool = True
     device: str = "cpu"
+
+MIN_FLOAT = -1.0e7
 
 class RunningMeanStd:
     # https://github.com/Lizhi-sjtu/DRL-code-pytorch/blob/69019cf9b1624db3871d4ed46e29389aadfdcb02/4.PPO-discrete/normalization.py
@@ -144,13 +145,11 @@ class MlpSeparate(nn.Module):
         return self.critic(obs)
     
     # mask is a boolean tensor with the same shape as your action space, where True indicates an invalid action.
-    def get_action(self, obs, action=None, mask=None):
+    def get_action(self, obs: torch.Tensor, action: torch.Tensor = None, mask : torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         logits = self.actor(obs)
-        if mask is not None:
-            assert mask.any(), mask
-            masks = mask.reshape(logits.shape).bool()
-            logits = torch.where(masks, logits, -1e8)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
+        if mask is not None:
+            split_logits = [logits.masked_fill(mask, float('-inf')) for logits in split_logits]
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
             action = torch.stack([dist.sample() for dist in multi_dists])
@@ -183,18 +182,11 @@ class PPOAgent(Base):
 
 
     def act(self, obs: np.ndarray) -> np.ndarray:
-        if self.config.masked:
-            mask = torch.Tensor(self.env.get_action_mask()).to(self.config.device)
-            for row in range(self.env.config.vms):
-                if mask[row, -2] and np.random.rand() > self.config.migration_discount:
-                    mask[row, -2] = False
-        else: 
-            mask = None
-        obs = torch.Tensor(obs).float().to(self.config.device).unsqueeze(0) # a batch of size 1
+        obs = torch.from_numpy(obs).float().to(self.config.device).unsqueeze(0) # a batch of size 1
         if self.config.det:
             action = self.model.get_det_action(obs)
         else:
-            action, _, _ = self.model.get_action(obs, mask=mask)
+            action, _, _ = self.model.get_action(obs)
         return action.flatten().cpu().numpy()
 
     def save_model(self, modelpath):
@@ -209,8 +201,7 @@ class PPOAgent(Base):
         ep_returns = np.zeros(self.config.episodes)
         pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar))
         return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
-        
-        mask_batch = torch.zeros((self.config.batch_size,self.env.config.vms, self.env.config.pms + 2), dtype=bool, device=self.config.device)
+
         action_batch = torch.zeros((self.config.batch_size,self.env.action_space.nvec.size), dtype=int, device=self.config.device)
         obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, device=self.config.device)
         next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, device=self.config.device)
@@ -229,18 +220,15 @@ class PPOAgent(Base):
         for i_episode in pbar:
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
-            obs = torch.Tensor(obs).float().to(self.config.device)
+            obs = torch.from_numpy(obs).float().to(self.config.device)
             done = False
             while not done:
-                mask = torch.Tensor(self.env.get_action_mask()).to(self.config.device) if self.config.masked else None
-                action, logprob, _ = self.model.get_action(obs.unsqueeze(0), mask=mask) # pass in a batch of size 1
+                action, logprob, _ = self.model.get_action(obs.unsqueeze(0)) # pass in a batch of size 1
                 action = torch.flatten(action)
                 next_obs, reward, done, truncated, info = self.env.step(action.cpu().numpy())
-                next_obs = torch.Tensor(next_obs).float().to(self.config.device)
+                next_obs = torch.from_numpy(next_obs).float().to(self.config.device)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
-                
-                if self.config.masked:
-                    mask_batch[i_batch] = mask
+
                 action_batch[i_batch] = action
                 obs_batch[i_batch] = obs
                 next_obs_batch[i_batch] = next_obs
@@ -250,7 +238,7 @@ class PPOAgent(Base):
                 i_batch += 1
 
                 if i_batch >= self.config.batch_size:
-                    self.update(mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
+                    self.update(action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
                     scheduler.step()
                     i_batch = 0
                 
@@ -266,8 +254,8 @@ class PPOAgent(Base):
             if i_episode > return_factor: 
                 pbar.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
 
-    def update(self, mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch):
-        
+    def update(self, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch):
+
         # GAE advantages         
         with torch.no_grad():      
             gae = 0     
@@ -294,8 +282,7 @@ class PPOAgent(Base):
             for bi, minibatch in enumerate(minibatches):
                 adv_minibatch = advantages[minibatch]
                 adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10) # Adv normalisation
-                mask_minibatch = mask_batch[minibatch] if self.config.masked else None
-                _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action=action_batch[minibatch], mask=mask_minibatch)
+                _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action_batch[minibatch])
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
                 assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.

@@ -14,7 +14,7 @@ def evaluate(args):
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.episodes
+    config['environment']['eval_steps'] = exp.eval_steps
     config['environment']['reward_function'] = "utilisation"
     config['environment']['service_length'] = sr
     config['environment']['sequence'] = "uniform"
@@ -67,13 +67,13 @@ if __name__ == '__main__':
     for sr in np.arange(100, 4100, 200):
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppolstm', 'weights/ppolstm-r2.pt', load, sr))
+        args.append(('ppo', 'weights/ppo-r2.pt', load, sr))
 
     sr = exp.service_length
     for load in np.arange(0.2, 1.2, 0.1):
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppolstm', 'weights/ppolstm-r2.pt', load, sr))
+        args.append(('ppo', 'weights/ppo-r2.pt', load, sr))
     
     with Pool(exp.cores) as pool: 
         for res in pool.imap_unordered(evaluate, args): 

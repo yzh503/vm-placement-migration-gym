@@ -7,9 +7,6 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.kl import kl_divergence
 import torch
 
-WAIT_STATUS = -1
-EMPTY_SLOT = -2
-
 @dataclass
 class EnvConfig(object):
     arrival_rate: float = 0.182 # 100% system load: pms / distribution expectation / service rate 
@@ -32,17 +29,33 @@ class VmEnv(gym.Env):
     def __init__(self, config: EnvConfig):
         self.config = config
         self.eval_mode = False
-        self.observation_space = spaces.Box(low=-2, high=self.config.pms, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
-        self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.config.pms + 1))  # Every VM has (PMs + wait status) actions
+        self.observation_space = spaces.Box(low=-1, high=self.config.pms+1, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
+        self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.config.pms + 2))  # Every VM has (PMs or wait action or null action) actions
+        self.WAIT_STATUS = self.config.pms
+        self.NULL_STATUS = self.config.pms + 1
         self.reset(self.config.seed)
 
         print("Environment initialized with config: ", self.config)
 
-    def _placement_valid(self, pm, vm):
-        if pm == -1: 
-            return True 
-        else:
-            return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
+    def validate(self, vm: int, current_pm: int, move_to_pm: int) -> bool:
+        if current_pm == move_to_pm: # Null action
+            return True
+        if current_pm == self.WAIT_STATUS: # VM is waiting
+            return move_to_pm < self.WAIT_STATUS and self._resource_valid(vm, move_to_pm)
+        if current_pm < self.WAIT_STATUS: # VM is on a PM
+            return move_to_pm == self.WAIT_STATUS
+        return False
+
+    # invalid is true
+    def get_action_mask(self) -> np.ndarray:
+        mask = np.zeros([self.config.vms , self.config.pms + 2], dtype=bool)
+        for vm, current_pm in enumerate(self.vm_placement):
+            for move_to_pm in range(self.config.pms + 2):
+                mask[vm, move_to_pm] = self.validate(vm, current_pm, move_to_pm)
+        return mask
+
+    def _resource_valid(self, vm, pm):
+        return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
 
     def _free_pm(self, pm, vm):
         self.cpu[pm] -= self.vm_cpu[vm]
@@ -53,38 +66,35 @@ class VmEnv(gym.Env):
         self.memory[pm] += self.vm_memory[vm]
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
+        assert self.action_space.contains(action), f"Invalid action received: " + str(action)
         action = action.copy()
-        action -= 1 # -1 for wait status
         actions_valid = np.zeros_like(action)
         for vm, move_to_pm in enumerate(action): 
             current_pm = self.vm_placement[vm]
-            action_valid = True
-            action_valid = action_valid and not (move_to_pm == EMPTY_SLOT)                                          # No direct termination
-            action_valid = action_valid and not (current_pm == EMPTY_SLOT)                       # VM has to be waiting or running
-            action_valid = action_valid and not (current_pm == move_to_pm)                               # No same spot moving
-            action_valid = action_valid and not (current_pm > WAIT_STATUS and move_to_pm > WAIT_STATUS)  # No direct swap
-            action_valid = action_valid and self._placement_valid(move_to_pm, vm)        # PM has to be available
+            action_valid = self.validate(vm, current_pm, move_to_pm)
             actions_valid[vm] = int(action_valid)
 
             if action_valid: 
                 self.vm_placement[vm] = move_to_pm
-                if move_to_pm == WAIT_STATUS:  # Free up PM
+                if move_to_pm == current_pm:
+                    pass # Unchanged
+                elif move_to_pm == self.WAIT_STATUS:  # Free up PM
                     self._free_pm(current_pm, vm)
                     self.vm_suspended[vm] = 1
                     self.suspend_action += 1
-                elif move_to_pm > WAIT_STATUS: # Allocate
+                elif move_to_pm < self.WAIT_STATUS: # Allocate
                     self._place_vm(move_to_pm, vm)
                     if self.vm_suspended[vm] == 0:
                         self.served_requests += 1
                     self.vm_suspended[vm] = 0
                     self.place_action += 1
                 else: 
-                    pass # do not change PM utilisation 
+                    raise ValueError("Invalid move_to_pm: " + str(move_to_pm))
 
         obs, reward, terminated, info = self._process_action()
 
         info = info | {
-            "action": action.tolist(),
+            "action": action,
             "valid": actions_valid
         }
 
@@ -112,11 +122,12 @@ class VmEnv(gym.Env):
         self._run_vms()
         self._accept_vm_requests() 
         
-        vms_arrived = np.count_nonzero(self.vm_placement > EMPTY_SLOT)
-        self.waiting_ratio = np.count_nonzero(self.vm_placement == WAIT_STATUS) / vms_arrived if vms_arrived > 0 else 0
+        vms_arrived = np.count_nonzero(self.vm_placement < self.config.pms + 1)
+        vms_waiting = np.count_nonzero(self.vm_placement == self.config.pms)
+        self.waiting_ratio = vms_waiting / vms_arrived if vms_arrived > 0 else 0
         self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms
-        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement != EMPTY_SLOT]) / self.config.pms
-        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement != EMPTY_SLOT]) / self.config.pms
+        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
 
         if self.config.cap_target_util and self.target_cpu_mean > 1: 
             self.target_cpu_mean = 1.0
@@ -137,11 +148,8 @@ class VmEnv(gym.Env):
             reward = self.config.beta * np.sum(self.cpu) + (1 - self.config.beta) * np.sum(self.memory)
         elif self.config.reward_function == "waiting_ratio":
             reward = - self.waiting_ratio 
-        elif self.config.reward_function == "waiting_time":
-            if self.vm_waiting_time[self.vm_waiting_time > 0].size == 0: 
-                reward = 0.0
-            else:
-                reward = - np.mean(self.vm_waiting_time[self.vm_waiting_time > 0])
+        elif self.config.reward_function == "waiting_steps":
+            reward = - np.count_nonzero(self.vm_placement == self.WAIT_STATUS)
         else: 
             assert False, f'Function does not exist: {self.config.reward_function}'
 
@@ -168,7 +176,7 @@ class VmEnv(gym.Env):
         super().reset(seed=seed)
         self.seed(seed)
         # Observable
-        self.vm_placement = np.full(self.config.vms, EMPTY_SLOT) # -1 is a VM request. -2 is an empty slot. 0... are PM indices. 
+        self.vm_placement = np.full(self.config.vms, self.NULL_STATUS) #  0...P are PM indices. P is a VM request. P + 1 is an empty slot.
         self.vm_cpu = np.zeros(self.config.vms) 
         self.vm_memory = np.zeros(self.config.vms)
         self.cpu = np.zeros(self.config.pms)
@@ -232,18 +240,18 @@ class VmEnv(gym.Env):
         pass
 
     def _run_vms(self):
-        vm_running = np.argwhere(np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement > WAIT_STATUS))
+        vm_running = np.argwhere(np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement < self.WAIT_STATUS))
         if vm_running.size > 0:
             self.vm_remaining_runtime[vm_running] -= 1  
 
-        vm_waiting = np.argwhere(self.vm_placement == WAIT_STATUS)
+        vm_waiting = np.argwhere(self.vm_placement == self.WAIT_STATUS)
         self.vm_waiting_time[vm_waiting] += 1
             
-        vm_to_terminate = np.argwhere(np.logical_and(self.vm_remaining_runtime == 0, self.vm_placement > WAIT_STATUS)).flatten()
+        vm_to_terminate = np.argwhere(np.logical_and(self.vm_remaining_runtime == 0, self.vm_placement < self.WAIT_STATUS)).flatten()
 
         if vm_to_terminate.size > 0:
             pms_to_free_up = self.vm_placement[vm_to_terminate]
-            self.vm_placement[vm_to_terminate] = EMPTY_SLOT
+            self.vm_placement[vm_to_terminate] = self.NULL_STATUS
 
             # Multiple VMs could be on the same PM, so use a loop to free up iteratively
             for vm, pm in zip(vm_to_terminate, pms_to_free_up): 
@@ -263,9 +271,9 @@ class VmEnv(gym.Env):
     def _accept_vm_requests(self):
         arrivals = self.rng3.poisson(self.config.arrival_rate)
         self.total_requests += arrivals
-        placed_arrivals = min(arrivals, self.vm_placement[self.vm_placement ==  EMPTY_SLOT].size)
-        to_accept = np.argwhere(self.vm_placement == EMPTY_SLOT).flatten()[:placed_arrivals]
-        self.vm_placement[to_accept] = WAIT_STATUS
+        placed_arrivals = min(arrivals, self.vm_placement[self.vm_placement ==  self.NULL_STATUS].size)
+        to_accept = np.argwhere(self.vm_placement == self.NULL_STATUS).flatten()[:placed_arrivals]
+        self.vm_placement[to_accept] = self.config.pms
 
         vm_cpu_list = self.vm_cpu_sequence[:to_accept.size]
         self.total_cpu_requested += np.sum(vm_cpu_list)
@@ -312,6 +320,6 @@ class VmEnv(gym.Env):
     def _get_rank(self):
         M = np.zeros(shape=(self.config.vms, self.config.pms))
         for i, pm in enumerate(self.vm_placement):
-            if pm > -1:
+            if pm < self.WAIT_STATUS:
                 M[i, pm] = 1 
         return np.linalg.matrix_rank(M)

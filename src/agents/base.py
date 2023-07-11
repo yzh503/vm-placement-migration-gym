@@ -62,13 +62,10 @@ class Base:
 
             self.env.test = 0
             action = self.act(obs)
-            if debug: 
-                if type(action) == int:
-                    print('action: \t\t%d' % (action - 1))
-                else:
-                    print('action: \t\t%s' % ((action - 1).flatten().tolist()))
+                
             obs, reward, done, truncated, info = self.env.step(action)
             if debug: 
+                print('action: \t\t%s' % (action.flatten()))
                 print('validity: \t\t%s' % (info['valid']))
                 print('reward: \t\t%.2f' % (reward))
                 print('')

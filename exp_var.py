@@ -11,7 +11,7 @@ def evaluate_var(vars, evalmode):
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.episodes
+    config['environment']['eval_steps'] = exp.eval_steps
     
     args = []
 

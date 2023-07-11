@@ -4,7 +4,6 @@ from src.agents.caviglione import CaviglioneAgent, CaviglioneConfig
 from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent, FirstFitConfig
 from src.agents.ppolstm import RecurrentPPOAgent, RecurrentPPOConfig
-from src.agents.dqn import DQNAgent, DQNConfig
 from src.agents.rainbow import RainbowAgent, RainbowConfig
 from src.agents.convexrank import ConvexAgent, ConvexConfig
 from src.agents.convexrankall import ConvexAllAgent, ConvexAllConfig
@@ -95,7 +94,7 @@ def run(args: Args) -> Record:
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convexrankall", "convexrank", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
+    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "ppolstm", "firstfit", "bestfit", "convexrankall", "convexrank", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/r2.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")

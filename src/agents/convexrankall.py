@@ -33,7 +33,7 @@ class ConvexAllAgent(Base):
 
         if len(self.queue) > 0:  # check if there's any operation left in the queue
             action = self.queue.pop(0)  # perform the operation and remove it from the queue
-            return action + 1
+            return action
         
         new_placement = self.maximize_nuclear_norm(vm_cpu, vm_memory, vm_placement.copy())
 
@@ -41,14 +41,14 @@ class ConvexAllAgent(Base):
         has_migration = False
         migration = new_placement.copy()
         for i in range(len(vm_placement)):
-            if vm_placement[i] > -1 and new_placement[i] > -1 and vm_placement[i] != new_placement[i]:
+            if -1 < vm_placement[i] and vm_placement[i] < self.env.config.pms and -1 < new_placement[i] and new_placement[i] < self.env.config.pms and vm_placement[i] != new_placement[i]:
                 has_migration = True
-                new_placement[i] = -1  # remove the VM from the new placement
+                new_placement[i] =  self.env.config.pms # remove the VM from the new placement
         
         if has_migration:
             self.queue.append(migration) 
 
-        return new_placement + 1
+        return new_placement
 
     # V is the number of VMs
     # P is the number of PMs
@@ -57,21 +57,21 @@ class ConvexAllAgent(Base):
     # X_values is the VxP matrix of VMs' placement
     def maximize_nuclear_norm(self, A, B, vm_placement):
 
-        if np.count_nonzero(vm_placement > -2) == 0:
+        if np.count_nonzero(vm_placement > -1) == 0:
             return vm_placement
         
         P = self.env.config.pms
         V = self.env.config.vms
-        A = A[vm_placement > -2].reshape(1, -1)
-        B = B[vm_placement > -2].reshape(1, -1)
+        A = A[vm_placement > -1].reshape(1, -1)
+        B = B[vm_placement > -1].reshape(1, -1)
 
         M = np.zeros(shape=(self.env.config.vms, self.env.config.pms))
         for i, pm in enumerate(vm_placement):
-            if pm > -1:
+            if -1 < pm and pm < self.env.config.pms:
                 M[i, pm] = 1 
 
         cols_to_optimize = np.ones(P, dtype=bool)
-        rows_to_optimize = vm_placement > -2 # variable rows
+        rows_to_optimize = vm_placement > -1 # variable rows
         rows_optimized = []
 
         while rows_to_optimize.any() and cols_to_optimize.any():
@@ -79,7 +79,7 @@ class ConvexAllAgent(Base):
             rows_formatted = []
             # find the first -1 
             variable_rows = [] # only has 1 variable row, becuase multiple variable rows may get stuck in non-existence of solution
-            for i, row in enumerate(M[vm_placement > -2]): 
+            for i, row in enumerate(M[vm_placement > -1]): 
                 if rows_to_optimize[i]:
                     Z = cvx.Variable((1, cols))
                     Z.value = row[cols_to_optimize].reshape(1, -1)
@@ -93,14 +93,14 @@ class ConvexAllAgent(Base):
             
             # X is a binary matrix of shape V * P, where V is the number of VMs and P is the number of servers
             # R is resource matrix of shape 2 * P, where P is the number of servers
-            # cvx.multiply(M[vm_placement > -2], 1 - X) @ onesn represents if corresponding VM was initially placed on one server and finally re-placed on another server. 
-            # onesm @ cvx.multiply(M[vm_placement > -2], 1 - X) @ onesn is the total number of VM migration requests.
+            # cvx.multiply(M[vm_placement > -1], 1 - X) @ onesn represents if corresponding VM was initially placed on one server and finally re-placed on another server. 
+            # onesm @ cvx.multiply(M[vm_placement > -1], 1 - X) @ onesn is the total number of VM migration requests.
             X = cvx.bmat(rows_formatted)
             onesm = np.ones(shape=(1, X.shape[0]))
             onesn = np.ones(shape=(1, X.shape[1]))
             constraints = [0 <= X, X <= 1, cvx.sum(X[variable_rows]) == 1, A @ X <= 1, B @ X <= 1]
-            objective = cvx.Minimize(cvx.norm(X, 'nuc') + self.config.migration_penalty * onesm @ (cvx.multiply(M[vm_placement > -2][:, cols_to_optimize], 1 - X)) @ onesn.T)
-            # (cvx.multiply(M[vm_placement > -2], 1 - X)) @ onesn has shape 1,P
+            objective = cvx.Minimize(cvx.norm(X, 'nuc') + self.config.migration_penalty * onesm @ (cvx.multiply(M[vm_placement > -1][:, cols_to_optimize], 1 - X)) @ onesn.T)
+            # (cvx.multiply(M[vm_placement > -1], 1 - X)) @ onesn has shape 1,P
 
             prob = cvx.Problem(objective, constraints)
             try: 
@@ -144,7 +144,7 @@ class ConvexAllAgent(Base):
                 | Z5    |
             """
 
-            X_full = M[vm_placement > -2]
+            X_full = M[vm_placement > -1]
             X_opt = np.array(X.value)
 
             # Algorithm 2: VM Deployement 
@@ -165,7 +165,7 @@ class ConvexAllAgent(Base):
                     #print("Overloaded: ", v, p_full, X_full)
                     cols_to_optimize[p_full] = False
                     X_opt = np.delete(X_opt, p, axis=1)
-                    X_full[v, :] = M[vm_placement > -2][v, p_full]
+                    X_full[v, :] = M[vm_placement > -1][v, p_full]
                 else: 
                     #print("Underloaded: ", v, p_full, X_full)
                     rows_optimized.append((v, X_full[v]))
@@ -174,7 +174,7 @@ class ConvexAllAgent(Base):
                 if count == self.config.W:
                     break
 
-            M[vm_placement > -2] = X_full[:]
+            M[vm_placement > -1] = X_full[:]
         
         for v, row in rows_optimized: 
             pm = np.argwhere(row == 1).flatten() # pm is the index of available PMs

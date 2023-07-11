@@ -9,7 +9,7 @@ class RecurrentPPOConfig:
     learning_rate: float = 3e-5
     batch_size: int = 100
     ent_coef: float = 0.01
-    lstm_hidden_size: int = 256
+    hidden_size: int = 256
     n_lstm_layers: int = 1
     device: str = "cpu"
 
@@ -24,7 +24,7 @@ class RecurrentPPOAgent(Base):
                                   n_steps=self.env.config.training_steps, 
                                   learning_rate=self.config.learning_rate, 
                                   device=self.config.device,
-                                  policy_kwargs=dict(lstm_hidden_size=self.config.lstm_hidden_size, n_lstm_layers=self.config.n_lstm_layers))
+                                  policy_kwargs=dict(lstm_hidden_size=self.config.hidden_size, n_lstm_layers=self.config.n_lstm_layers))
 
         self.lstm_states = None
         

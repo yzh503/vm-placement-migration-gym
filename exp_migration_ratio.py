@@ -10,7 +10,7 @@ import exp
 
 def evaluate_seeds(args):
 
-    agent, weightspath, rewardfn = args
+    weightspath, rewardfn, migration_discount = args
     configfile = open('config/r2.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
@@ -20,25 +20,26 @@ def evaluate_seeds(args):
     config['environment']['service_length'] = exp.service_length
     config['environment']['sequence'] = "uniform"
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
-    
+    config['agents']['ppo']['migration_discount'] = migration_discount
+
     args = []
     records = []
-    for seed in np.arange(0, exp.multiruns): 
-        recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
+    for seed in np.arange(0, 5): 
+        recordname = f'data/exp_migration_discount/{rewardfn}-{migration_discount}-{seed}.json'     
         if exists(recordname):
             print(f"{recordname} exists")
             f = open(recordname, 'r')
             jsonstr = ujson.load(f)
-            record = Record.import_record(agent, jsonstr)
+            record = Record.import_record("ppo", jsonstr)
             records.append(record)
             f.close()
             del jsonstr
         else: 
             print(f"{recordname} does not exist")
             config = copy.deepcopy(config)
-            config['environment']['seed'] = seed
+            config['environment']['seed'] = int(seed)
             args.append(main.Args(
-                    agent=agent, 
+                    agent='ppo', 
                     config=config, 
                     silent=True,
                     logdir=None,
@@ -52,7 +53,7 @@ def evaluate_seeds(args):
         with Pool(exp.cores) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
-                recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
+                recordname = f'data/exp_migration_discount/{rewardfn}-{migration_discount}-{seed}.json'     
                 record.save(recordname)
                 records.append(record)
 
@@ -84,7 +85,8 @@ def evaluate_seeds(args):
     memory_var_multitests = np.var(memory, axis=2)
     memory_var = np.mean(memory_var_multitests, axis=0)
     
-    to_print = '%s,' % (agent) 
+    to_print = '%s,' % (rewardfn)
+    to_print += '%.3f,' % (migration_discount) 
     to_print += '%.3f,' % (np.mean(returns))
     to_print += '%.3f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
@@ -103,12 +105,13 @@ if __name__ == '__main__':
 
     print("Evaluating Reward Functions...")
 
-    to_print = 'Agent, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r1.pt', "kl"))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r2.pt', "utilisation"))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r3.pt', "waiting_ratio"))
+    to_print = 'Reward Function, Migration Ratio, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
+    for migration_discount in np.arange(0.00, 1.11, 0.05):
+        migration_discount = np.round(migration_discount, 2).astype(float)
+        to_print += evaluate_seeds(('weights/ppo-r2.pt', "utilisation", migration_discount))
+        to_print += evaluate_seeds(('weights/ppo-r3.pt', "waiting_ratio", migration_discount))
 
-    file = open('data/exp_reward/summary.csv', 'w')
+    file = open('data/exp_migration_discount/summary.csv', 'w')
     file.write(to_print)
     file.close()
 

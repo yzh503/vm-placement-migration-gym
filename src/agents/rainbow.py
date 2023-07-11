@@ -510,7 +510,7 @@ class RainbowAgent(Base):
 
 
     def _multi_discrete(self, observation: torch.Tensor, action: list[torch.Tensor]) -> np.ndarray:
-        obsdict = convert_obs_to_dict(observation.flatten().numpy()) 
+        obsdict = convert_obs_to_dict(self.env.config, observation.flatten().numpy()) 
         vm_placement = obsdict["vm_placement"]
         vm = action[0]
         vm_placement[vm] = action[1] - 1 # first action denotes waiting
