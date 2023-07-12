@@ -12,12 +12,12 @@ from src.record import Record
 def evaluate_seeds(args, results):
 
     agent, weightspath, load = args
-    configfile = open('config/r2.yml')
+    configfile = open('config/r3.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.eval_steps
-    config['environment']['reward_function'] = "utilisation"
+    config['environment']['reward_function'] = "waiting_ratio"
     config['environment']['service_length'] = exp.service_length
     config['environment']['sequence'] = "uniform"
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 3)
@@ -122,19 +122,19 @@ if __name__ == '__main__':
     to_print += evaluate_seeds(('firstfit', None, exp.load), results)
     to_print += evaluate_seeds(('bestfit', None, exp.load), results)
     to_print += evaluate_seeds(('convexrankall', None, exp.load), results)
-    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r2.pt', exp.load), results)
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r2.pt', exp.load), results)
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r2.pt', exp.load), results)
-    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r2.pt', exp.load), results)
+    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r3.pt', exp.load), results)
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-r3.pt', exp.load), results)
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r3.pt', exp.load), results)
+    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r3.pt', exp.load), results)
 
 
     to_print += evaluate_seeds(('firstfit', None, 0.75), results)
     to_print += evaluate_seeds(('bestfit', None, 0.75), results)
     to_print += evaluate_seeds(('convexrankall', None, 0.75), results)
-    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r2-low.pt', 0.75), results)
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r2-low.pt', 0.75), results)
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r2-low.pt', 0.75), results)
-    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r2-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r3-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-r3-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r3-low.pt', 0.75), results)
+    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r3-low.pt', 0.75), results)
     
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')

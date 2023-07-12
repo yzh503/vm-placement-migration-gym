@@ -11,7 +11,7 @@ import exp
 def evaluate_seeds(args):
 
     weightspath, rewardfn, migration_discount = args
-    configfile = open('config/r2.yml')
+    configfile = open('config/r3.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms

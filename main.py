@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from src.agents.bestfit import BestFitAgent, BestFitConfig
+from src.agents.bestfit import BestFitAgent
 from src.agents.caviglione import CaviglioneAgent, CaviglioneConfig
 from src.agents.ppo import PPOAgent, PPOConfig
-from src.agents.firstfit import FirstFitAgent, FirstFitConfig
+from src.agents.firstfit import FirstFitAgent
 from src.agents.ppolstm import RecurrentPPOAgent, RecurrentPPOConfig
 from src.agents.rainbow import RainbowAgent, RainbowConfig
 from src.agents.convexrank import ConvexAgent, ConvexConfig
@@ -58,9 +58,9 @@ def run(args: Args) -> Record:
     elif args.agent == "ppolstm":
         agent = RecurrentPPOAgent(env, RecurrentPPOConfig(**training_config), args.logdir)
     elif args.agent == "firstfit":
-        agent = FirstFitAgent(env, FirstFitConfig(**training_config))
+        agent = FirstFitAgent(env)
     elif args.agent == "bestfit":
-        agent = BestFitAgent(env, BestFitConfig(**training_config))
+        agent = BestFitAgent(env)
     else: 
         print(f"Agent cannot be {args.agent}")
     
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-a", "--agent", required=True, choices=["ppo", "ppolstm", "firstfit", "bestfit", "convexrankall", "convexrank", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
-    parser.add_argument("-c", "--config", default='config/r2.yml', help = "Configuration for environment and agent")
+    parser.add_argument("-c", "--config", default='config/r3.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")
     parser.add_argument("-j", "--jobname", help="Job name in tensorboard")

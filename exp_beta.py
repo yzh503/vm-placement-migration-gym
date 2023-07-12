@@ -7,7 +7,7 @@ import copy
 import exp
 
 def evaluate_beta(betas, evalmode):
-    configfile = open('config/r2.yml')
+    configfile = open('config/r3.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
