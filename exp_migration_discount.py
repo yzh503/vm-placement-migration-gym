@@ -10,23 +10,20 @@ import exp
 import time 
 
 def evaluate(args):
-    agent, weightspath, load, sr = args
+    agent, weightspath, rewardfn, migration_discount = args
     configfile = open('config/r1.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.eval_steps
-    config['environment']['reward_function'] = "waiting_ratio"
-    config['environment']['service_length'] = sr
-    config['environment']['sequence'] = "uniform"
-    config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 3)
+    config['environment']['reward_function'] = rewardfn
+    config['environment']['service_length'] = exp.service_length
+    config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
+
+    config['agents']['ppo']['migration_discount'] = migration_discount
 
     args = []
-    if weightspath is None: 
-        jobname = agent
-    else: 
-        jobname = weightspath.split('/')[-1].split('.')[0]
-    recordname = 'data/exp_suspension/%s-sr%dload%.2f.json' % (jobname, sr, load)
+    recordname = 'data/exp_migration_discount/%s-%.2f.json' % (agent, migration_discount)
     
     if exists(recordname):
         print(f"{recordname} exists")
@@ -38,7 +35,7 @@ def evaluate(args):
         print(f"{recordname} does not exist")
         config = copy.deepcopy(config)
         record = main.run(main.Args(
-                    agent=agent, 
+                    agent='ppo', 
                     config=config, 
                     silent=True,
                     logdir=None,
@@ -49,17 +46,14 @@ def evaluate(args):
                     debug=False))
         record.save(recordname)
 
-    to_print = '%s,' % (jobname) 
-    to_print += '%.1f,' % (load) 
-    to_print += '%d,' % (sr) 
+    to_print = '%s,' % (agent) 
+    to_print += '%.2f,' % (migration_discount) 
     to_print += '%d,' % (record.served_requests[-1]) 
-    to_print += '%d,' % (record.suspended[-1])
-    to_print += '%d,' % (record.suspended[-1] + record.placed[-1])
-    to_print += '%d,' % (np.mean(record.vm_lifetime))
     to_print += '%.3f,' % (np.mean(record.pending_rates))
     to_print += '%.3f,' % (np.mean(record.slowdown_rates))
     to_print += '%.3f' % (np.max(record.slowdown_rates))
     del record
+    print(to_print + '\n')
     return to_print + '\n'
 
 
@@ -68,27 +62,21 @@ def evaluate_wrapper(args, results):
     results.append(res)
 
 if __name__ == '__main__':
-    print("Evaluating Service Length and Load...")
-
-    to_print = 'Agent, Load, Service Length, Total Served, Valid Suspend Actions, Valid Actions, Life, Average Pending, Average Slowdown, Max Slowdown\n'
+    to_print = 'Agent, Migration Discount, Total Served, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
-    load = exp.load
-    for sr in np.arange(100, 4100, 200):
-        args.append(('caviglione', 'weights/caviglione-r1.pt', load, sr))
-        args.append(('firstfit', None, load, sr))
-        args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-r1.pt', load, sr))
-        args.append(('convex', '', load, sr))
+    for migration_discount in np.arange(0.0, 0.05, 0.01):
+        args.append(('ppo-r1', 'weights/ppo-r1.pt', 'waiting_ratio', migration_discount))
+        args.append(('ppo-r2', 'weights/ppo-r2.pt', 'utilisation', migration_discount))
+        args.append(('ppo-r3', 'weights/ppo-r3.pt', 'kl', migration_discount))
 
 
-    sr = exp.service_length
-    for load in np.arange(0.2, 1.1, 0.1):
-        args.append(('caviglione', 'weights/caviglione-r1.pt', load, sr))
-        args.append(('firstfit', None, load, sr))
-        args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-r1.pt', load, sr))
-        args.append(('convex', '', load, sr))
+    for migration_discount in np.arange(0.0, 1.05, 0.05):
+        args.append(('ppo-r1', 'weights/ppo-r1.pt', 'waiting_ratio', migration_discount))
+        args.append(('ppo-r2', 'weights/ppo-r2.pt', 'utilisation', migration_discount))
+        args.append(('ppo-r3', 'weights/ppo-r3.pt', 'kl', migration_discount))
+
+
 
     manager = multiprocessing.Manager()
     results = manager.list()
@@ -115,7 +103,7 @@ if __name__ == '__main__':
     for res in results:
         to_print += res
 
-    file = open('data/exp_suspension/data.csv', 'w')
+    file = open('data/exp_migration_discount/data.csv', 'w')
     file.write(to_print)
     file.close()
 

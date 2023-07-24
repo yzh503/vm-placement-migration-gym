@@ -1,31 +1,35 @@
 import ujson
 import yaml
 import numpy as np
-from multiprocessing import Pool
+import multiprocessing
 import pandas as pd
 from os.path import exists
 import copy
 import main 
 import exp
+import time
 from src.record import Record
 
-def evaluate_seeds(args, results):
+def evaluate_wrapper(args, records):
+    record = main.run(args)
+    records.append(record)
 
-    agent, weightspath, load = args
-    configfile = open('config/r3.yml')
+def evaluate(args, results):
+
+    agent, jobname, weightspath, load = args
+    configfile = open('config/r1.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.eval_steps
     config['environment']['reward_function'] = "waiting_ratio"
     config['environment']['service_length'] = exp.service_length
-    config['environment']['sequence'] = "uniform"
-    config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 3)
-    
+    config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 4)
+
     args = []
     records = []
     for seed in np.arange(0, exp.multiruns): 
-        recordname = 'data/exp_performance/load%.2f/%s-%d.json' % (load, agent, seed)        
+        recordname = 'data/exp_performance/load%.2f/%s-%d.json' % (load, jobname, seed)        
         if exists(recordname):
             print(f"{recordname} exists")
             f = open(recordname, 'r')
@@ -37,7 +41,7 @@ def evaluate_seeds(args, results):
         else: 
             print(f"{recordname} does not exist")
             config = copy.deepcopy(config)
-            config['environment']['seed'] = seed
+            config['environment']['seed'] = int(seed)
             args.append(main.Args(
                     agent=agent, 
                     config=config, 
@@ -49,13 +53,33 @@ def evaluate_seeds(args, results):
                     eval=True,
                     debug=False))
 
-    if len(args) > 0:
-        with Pool(exp.cores) as pool: 
-            for record in pool.imap_unordered(main.run, args): 
-                seed = record.env_config['seed']
-                recordname = 'data/exp_performance/load%.2f/%s-%d.json' % (load, agent, seed)     
-                record.save(recordname)
-                records.append(record)
+    manager = multiprocessing.Manager()
+    new_records = manager.list()
+    processes = []
+
+    for arg in args:
+        while len(processes) >= exp.cores:
+            for p in processes:
+                if not p.is_alive():
+                    p.join()
+                    processes.remove(p)
+                    break
+            else:
+                time.sleep(2) # If no process has finished yet, wait a bit and check again
+
+        p = multiprocessing.Process(target=evaluate_wrapper, args=(arg, new_records))
+        p.daemon = False  
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()
+
+    for record in new_records:
+        seed = record.env_config['seed']
+        recordname = 'data/exp_performance/load%.2f/%s-%d.json' % (load, jobname, seed)     
+        record.save(recordname)
+        records.append(record)
 
     returns, served_reqs, cpu, memory, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
     total_suspended = []
@@ -83,7 +107,7 @@ def evaluate_seeds(args, results):
     memory_mean_multitests = np.mean(memory, axis=2)
     memory_var = np.var(memory, axis=0)
     
-    results['agent'] += [agent] * exp.eval_steps
+    results['agent'] += [jobname] * exp.eval_steps
     results['load'] += [load] * exp.eval_steps
     results['step'] += np.arange(1, exp.eval_steps + 1, 1, dtype=int).tolist()
     results['cpu_mean'] += np.mean(cpu_mean_multitests, axis=0).tolist()
@@ -95,7 +119,7 @@ def evaluate_seeds(args, results):
     results['waiting_ratio'] += np.mean(waiting_ratios, axis=0).tolist()
     results['slowdown_rates'] += [np.mean(slowdown_rates)] * exp.eval_steps
 
-    to_print = '%s,' % (agent) 
+    to_print = '%s,' % (jobname) 
     to_print += '%.2f,' % (load) 
     to_print += '%.3f,' % (np.mean(returns))
     to_print += '%.3f,' % (np.mean(drop_rates))
@@ -119,22 +143,18 @@ if __name__ == '__main__':
     results = {'step': [], 'load': [], 'agent': [], 'cpu_mean': [], 'cpu_var': [], 'memory_mean': [], 'memory_var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Load, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    to_print += evaluate_seeds(('firstfit', None, exp.load), results)
-    to_print += evaluate_seeds(('bestfit', None, exp.load), results)
-    to_print += evaluate_seeds(('convexrankall', None, exp.load), results)
-    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r3.pt', exp.load), results)
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r3.pt', exp.load), results)
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r3.pt', exp.load), results)
-    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r3.pt', exp.load), results)
+    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-r1.pt', exp.load), results)
+    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-r1.pt', exp.load), results)
+    to_print += evaluate(('firstfit', 'firstfit',None, exp.load), results)
+    to_print += evaluate(('bestfit', 'bestfit',None, exp.load), results)
+    to_print += evaluate(('convex', 'convex', None, exp.load), results)
 
 
-    to_print += evaluate_seeds(('firstfit', None, 0.75), results)
-    to_print += evaluate_seeds(('bestfit', None, 0.75), results)
-    to_print += evaluate_seeds(('convexrankall', None, 0.75), results)
-    to_print += evaluate_seeds(('ppolstm', 'weights/ppolstm-r3-low.pt', 0.75), results)
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-r3-low.pt', 0.75), results)
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-r3-low.pt', 0.75), results)
-    to_print += evaluate_seeds(('rainbow', 'weights/rainbow-r3-low.pt', 0.75), results)
+    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-r1-low.pt', 0.75), results)
+    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-r1-low.pt', 0.75), results)
+    to_print += evaluate(('firstfit', 'firstfit', None, 0.75), results)
+    to_print += evaluate(('bestfit', 'bestfit', None, 0.75), results)
+    to_print += evaluate(('convex', 'convex', None, 0.75), results)
     
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')

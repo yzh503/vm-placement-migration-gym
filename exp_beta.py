@@ -7,7 +7,7 @@ import copy
 import exp
 
 def evaluate_beta(betas, evalmode):
-    configfile = open('config/r3.yml')
+    configfile = open('config/r1.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -22,7 +22,7 @@ def evaluate_beta(betas, evalmode):
         config = copy.deepcopy(config)
         config['environment']['beta'] = beta
 
-        # Only if the service rate is long enough would migration be worthwhile. 
+        # Only if the service length is long enough would migration be worthwhile. 
         recordname = f'data/exp_beta/{beta}.json'
         weightsname = f'data/exp_beta/{beta}.pt'
 

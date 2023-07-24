@@ -7,7 +7,7 @@ import copy
 import exp
 
 def evaluate_var(vars, evalmode):
-    configfile = open('config/r3.yml')
+    configfile = open('config/r1.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -19,7 +19,7 @@ def evaluate_var(vars, evalmode):
         config = copy.deepcopy(config)
         config['environment']['var'] = var
 
-        # Only if the service rate is long enough would migration be worthwhile. 
+        # Only if the service length is long enough would migration be worthwhile. 
         if evalmode: 
             config['environment']['service_length'] = exp.service_length
             config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)

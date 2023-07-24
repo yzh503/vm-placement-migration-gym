@@ -3,10 +3,7 @@ from src.agents.bestfit import BestFitAgent
 from src.agents.caviglione import CaviglioneAgent, CaviglioneConfig
 from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent
-from src.agents.ppolstm import RecurrentPPOAgent, RecurrentPPOConfig
-from src.agents.rainbow import RainbowAgent, RainbowConfig
-from src.agents.convexrank import ConvexAgent, ConvexConfig
-from src.agents.convexrankall import ConvexAllAgent, ConvexAllConfig
+from src.agents.convex import ConvexAgent, ConvexConfig
 from src.vm_gym.envs.env import EnvConfig
 from src.record import Record
 import gymnasium as gym
@@ -35,9 +32,9 @@ def run(args: Args) -> Record:
     config = args.config
     env_config = config["environment"]
     if args.agent in config["agents"]:
-        training_config = config["agents"][args.agent]
+        agent_config = config["agents"][args.agent]
     else:
-        training_config = {}
+        agent_config = {}
 
     torch.manual_seed(env_config['seed'])
     random.seed(env_config['seed'])
@@ -45,18 +42,12 @@ def run(args: Args) -> Record:
 
     env = gym.make("VmEnv-v1", config=EnvConfig(**env_config))
 
-    if args.agent == "rainbow":
-        agent = RainbowAgent(env, RainbowConfig(**training_config))
-    elif args.agent == "caviglione":
-        agent = CaviglioneAgent(env, CaviglioneConfig(**training_config))
+    if args.agent == "caviglione":
+        agent = CaviglioneAgent(env, CaviglioneConfig(**agent_config))
     elif args.agent == "ppo":
-        agent = PPOAgent(env, PPOConfig(**training_config))
-    elif args.agent == "convexrank":
-        agent = ConvexAgent(env, ConvexConfig(**training_config))
-    elif args.agent == "convexrankall":
-        agent = ConvexAllAgent(env, ConvexAllConfig(**training_config))
-    elif args.agent == "ppolstm":
-        agent = RecurrentPPOAgent(env, RecurrentPPOConfig(**training_config), args.logdir)
+        agent = PPOAgent(env, PPOConfig(**agent_config))
+    elif args.agent == "convex":
+        agent = ConvexAgent(env, ConvexConfig(**agent_config))
     elif args.agent == "firstfit":
         agent = FirstFitAgent(env)
     elif args.agent == "bestfit":
@@ -94,7 +85,7 @@ def run(args: Args) -> Record:
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "ppolstm", "firstfit", "bestfit", "convexrankall", "convexrank", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
+    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convex", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/r3.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")
