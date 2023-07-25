@@ -154,7 +154,7 @@ class MlpSeparate(nn.Module):
             action = torch.stack([dist.sample() for dist in multi_dists])
         else: 
             action = action.T
-        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
+        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)]) # Very subtle difference on one vs batch due to stochasticity
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
         return action.T, logprob.sum(dim=0), entropy.sum(dim=0)
     
