@@ -513,10 +513,11 @@ class RainbowAgent(Base):
         obsdict = convert_obs_to_dict(self.env.config, observation.flatten().numpy()) 
         vm_placement = obsdict["vm_placement"]
         vm = action[0]
-        vm_placement[vm] = action[1] - 1 # first action denotes waiting
-        return np.array(vm_placement) + 1 # action space starts from 0
+        vm_placement[vm] = action[1] 
+        return np.array(vm_placement) 
 
     def act(self, observation: np.ndarray) -> np.ndarray:
+        observation = torch.from_numpy(observation).float().to(self.device)
         selected_action = self._select_action(observation)
         return self._multi_discrete(observation, selected_action)
 

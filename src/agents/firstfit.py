@@ -1,15 +1,10 @@
-from dataclasses import dataclass
 import numpy as np
 from src.agents.base import Base
 from src.utils import convert_obs_to_dict
 
-@dataclass
-class FirstFitConfig: 
-    pass
-
 class FirstFitAgent(Base):
-    def __init__(self, env, config):
-        super().__init__(type(self).__name__, env, config)
+    def __init__(self, env):
+        super().__init__(type(self).__name__, env, None)
         
     def learn(self):
         pass

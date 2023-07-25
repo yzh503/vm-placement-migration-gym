@@ -1,23 +1,30 @@
 from abc import abstractmethod
 from src.record import Record
+from dataclasses import dataclass, asdict
 import numpy as np
-import torch
-from typing import Union
 from time import gmtime, strftime
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
-from tqdm import tqdm 
+from tqdm import tqdm
+from src.vm_gym.envs.env import VmEnv
+
+@dataclass
+class Config: 
+    pass
 
 class Base: 
-    def __init__(self, name, env, config):
+    def __init__(self, name: str, env: VmEnv, config: Config):
         self.name = name
         self.env = env
-        self.config = config
-        self.record = Record(self.name, self.env.config, self.config) 
+        self.config = Config() if config is None else config
+        self.record = Record(self.name, asdict(self.env.config), asdict(self.config)) 
         self.writer = None
         self.total_steps = 0
 
         self.rng = np.random.default_rng(self.env.config.seed)
+
+        print("Agent initialised with config: ", self.config)
+
 
     def set_log(self, jobname, logdir):
         if logdir: 

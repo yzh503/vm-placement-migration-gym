@@ -14,7 +14,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 from src.segment_tree import MinSegmentTree, SumSegmentTree
-from src.agents.base import Base
+from src.agents.base import Base, Config
 from src.vm_gym.envs.env import VmEnv
 from src.utils import convert_obs_to_dict
 
@@ -359,13 +359,11 @@ class Network(nn.Module):
         feature = self.feature_layer(x)
         adv_hid = F.relu(self.advantage_hidden_layer(feature))
         val_hid = F.relu(self.value_hidden_layer(feature))
-        
         advantage = self.advantage_layer(adv_hid).view(
             -1, self.out_dim, self.atom_size
         )
         value = self.value_layer(val_hid).view(-1, 1, self.atom_size)
         q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
-        
         dist = F.softmax(q_atoms, dim=-1)
         dist = dist.clamp(min=1e-3)  # for avoiding nans
         
@@ -379,7 +377,7 @@ class Network(nn.Module):
         self.value_layer.reset_noise()
 
 @dataclass
-class CaviglioneConfig(object):
+class CaviglioneConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
     lr: float = 3e-5
@@ -403,7 +401,7 @@ class CaviglioneAgent(Base):
         super().__init__(type(self).__name__, env, config)
         self.device = config.device
         obs_dim = self.env.observation_space.shape[0]
-        self.n_actions = 3 #  best fit, worst fit, dot product 
+        self.n_actions = 4
         self.beta = config.beta
         self.memory = PrioritizedReplayBuffer(obs_dim, config.memory_size, config.batch_size, alpha=config.alpha)
         self.use_n_step = True if config.n_step > 1 else False
@@ -502,10 +500,10 @@ class CaviglioneAgent(Base):
     def act(self, observation: np.ndarray) -> np.ndarray:
         observation = torch.from_numpy(observation).float().to(self.device)
         vm_placement = observation[:self.env.config.vms]
-        waiting_vms = np.argwhere(vm_placement == -1).flatten()
-        action = vm_placement + 1
+        waiting_vms = np.argwhere(vm_placement == self.env.WAIT_STATUS).flatten()
+        action = vm_placement 
         for i in waiting_vms:
-            choice = self._select_action(observation)
+            choice = self._select_action(observation.unsqueeze(0))
             observation, action = self._convert_action(observation, i, choice.item())
         return action.numpy().astype(int)
 
@@ -514,13 +512,14 @@ class CaviglioneAgent(Base):
 
     def _convert_action(self, observation: torch.Tensor, v: int, choice: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if v is None:
-            vm_placement = observation[:self.env.config.vms].to(int)
-            action = vm_placement + 1
+            action = observation[:self.env.config.vms].to(int)
         elif (choice == 0): 
             observation, action = self._get_worstfit_action(observation, v)
         elif (choice == 1): 
             observation, action = self._get_dot_action(observation, v)
-        elif (choice == 2): 
+        elif (choice == 2):
+            observation, action = self._get_norm2_action(observation, v)
+        elif (choice == 3): 
             observation, action = self._get_bestfit_action(observation, v)
         else: 
             raise ValueError("Invalid choice")
@@ -536,10 +535,10 @@ class CaviglioneAgent(Base):
 
         for p in range(len(cpu)): 
             if cpu[p] + vm_cpu[v] <= 1 and memory[p] + vm_memory[v] <= 1:
-                vm_placement[v] = p # first status is waiting 
+                vm_placement[v] = p 
                 break
 
-        action = vm_placement.clone() + 1 # first status is waiting
+        action = vm_placement.clone() 
         observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
     
@@ -554,10 +553,10 @@ class CaviglioneAgent(Base):
         pms = torch.flip(torch.argsort(cpu + memory), dims=[0])
         for p in pms: 
             if cpu[p] + vm_cpu[v] <= 1 and memory[p] + vm_memory[v] <= 1:
-                vm_placement[v] = p # first status is waiting 
+                vm_placement[v] = p 
                 break
 
-        action = vm_placement.clone() + 1 # first status is waiting
+        action = vm_placement.clone() 
         observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
     
@@ -572,10 +571,10 @@ class CaviglioneAgent(Base):
         pms = torch.argsort(cpu + memory)
         for p in pms: 
             if cpu[p] + vm_cpu[v] <= 1 and memory[p] + vm_memory[v] <= 1:
-                vm_placement[v] = p # first status is waiting 
+                vm_placement[v] = p 
                 break
 
-        action = vm_placement.clone() + 1 # first status is waiting
+        action = vm_placement.clone() 
         observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
 
@@ -592,7 +591,7 @@ class CaviglioneAgent(Base):
             norms[p] = torch.norm(torch.tensor([cpu[p], memory[p]]) - torch.tensor([vm_cpu[v], vm_memory[v]]))
         
         vm_placement[v] = torch.argmin(norms)
-        action = vm_placement.clone() + 1 # first status is waiting
+        action = vm_placement.clone() 
         observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
     
@@ -609,7 +608,7 @@ class CaviglioneAgent(Base):
             dotproducts[p] = torch.dot(torch.tensor([cpu[p], memory[p]]), torch.tensor([vm_cpu[v], vm_memory[v]]))
 
         vm_placement[v] = torch.argmin(dotproducts)
-        action = vm_placement.clone() + 1 # first status is waiting
+        action = vm_placement.clone() 
         observation = torch.cat([vm_placement, vm_cpu, vm_memory, cpu, memory])
         return observation, action
     

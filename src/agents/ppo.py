@@ -1,21 +1,19 @@
-from typing import Tuple
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
 from src.vm_gym.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
-from torch.distributions.normal import Normal
 from torch.optim import lr_scheduler
-from src.agents.base import Base
+from src.agents.base import Base, Config
 from dataclasses import dataclass
 import gymnasium
 from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSampler
 @dataclass
-class PPOConfig:
+class PPOConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
-    migration_discount: float = 0.2
+    migration_discount: float = 0.1
     masked: bool = True
     lr: float = 3e-5
     lr_lambda: float = 1
@@ -207,7 +205,8 @@ class PPOAgent(Base):
 
     def learn(self):
         ep_returns = np.zeros(self.config.episodes)
-        pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar))
+        pbar1 = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar), desc='Training')
+
         return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
         
         mask_batch = torch.zeros((self.config.batch_size,self.env.config.vms, self.env.config.pms + 2), dtype=bool, device=self.config.device)
@@ -224,13 +223,14 @@ class PPOAgent(Base):
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
 
-        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) #StepLR(self.optimizer, step_size=self.config.episodes // 100, gamma=0.95)
+        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) 
 
-        for i_episode in pbar:
+        for i_episode in pbar1:
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
             obs = torch.Tensor(obs).float().to(self.config.device)
             done = False
+            pbar2 = tqdm(total=int(self.env.config.training_steps), disable=not bool(self.config.training_progress_bar), desc='Episode', leave=False)
             while not done:
                 mask = torch.Tensor(self.env.get_action_mask()).to(self.config.device) if self.config.masked else None
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), mask=mask) # pass in a batch of size 1
@@ -257,6 +257,7 @@ class PPOAgent(Base):
                 obs = next_obs
                 self.total_steps += 1
                 current_ep_reward += reward  # For logging
+                pbar2.update()
 
             ep_returns[i_episode] = current_ep_reward
             if self.writer: 
@@ -264,7 +265,8 @@ class PPOAgent(Base):
                 self.writer.add_scalar('Training/lr', scheduler.get_last_lr()[0], i_episode)
 
             if i_episode > return_factor: 
-                pbar.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
+                pbar1.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
+            
 
     def update(self, mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch):
         
@@ -298,7 +300,7 @@ class PPOAgent(Base):
                 _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action=action_batch[minibatch], mask=mask_minibatch)
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
-                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.
+                #assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())

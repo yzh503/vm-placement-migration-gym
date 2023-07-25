@@ -3,13 +3,9 @@ import numpy as np
 from src.agents.base import Base
 from src.utils import convert_obs_to_dict
 
-@dataclass
-class BestFitConfig: 
-    pass
-
 class BestFitAgent(Base):
-    def __init__(self, env, config):
-        super().__init__(type(self).__name__, env, config)
+    def __init__(self, env):
+        super().__init__(type(self).__name__, env, None)
 
     def learn(self):
         pass

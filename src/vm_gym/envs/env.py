@@ -9,7 +9,7 @@ import torch
 
 @dataclass
 class EnvConfig(object):
-    arrival_rate: float = 0.182 # 100% system load: pms / distribution expectation / service rate 
+    arrival_rate: float = 0.182 # 100% system load: pms / distribution expectation / service length 
     service_length: float = 100
     pms: int = 10
     vms: int = 30   
@@ -35,7 +35,7 @@ class VmEnv(gym.Env):
         self.NULL_STATUS = self.config.pms + 1
         self.reset(self.config.seed)
 
-        print("Environment initialized with config: ", self.config)
+        print("Environment initialised with config: ", self.config)
 
     def validate(self, vm: int, current_pm: int, move_to_pm: int) -> bool:
         if current_pm == move_to_pm: # Null action
@@ -173,8 +173,11 @@ class VmEnv(gym.Env):
         self.rng4 = np.random.default_rng(seed+3)
 
     def reset(self, seed: Optional[int] = None, options=None):
-        super().reset(seed=seed)
-        self.seed(seed)
+        if seed is None:
+            super().reset()
+        else: 
+            super().reset(seed=int(seed))
+            self.seed(seed)
         # Observable
         self.vm_placement = np.full(self.config.vms, self.NULL_STATUS) #  0...P are PM indices. P is a VM request. P + 1 is an empty slot.
         self.vm_cpu = np.zeros(self.config.vms) 

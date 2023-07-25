@@ -1,10 +1,10 @@
 environment:  
-  pms: 10
-  vms: 30
+  pms: 100
+  vms: 250
   var: 0.01
-  service_length: 100
-  arrival_rate: 0.182 # 100% system load: pms / distribution expectation / service rate 
-  training_steps: 500
+  service_length: 1000
+  arrival_rate: 0.182 # 100% system load: pms / distribution expectation / service length 
+  training_steps: 10000
   eval_steps: 100000
   seed: 0
   reward_function: utilisation
@@ -13,21 +13,13 @@ environment:
   beta: 0.5
 agents: 
   ppo: 
-      episodes: 2000
-      hidden_size: 128
+      episodes: 100
+      hidden_size: 256
+      migration_discount: 0.25
       device: cpu 
-  ppolstm: 
-      episodes: 2000 
-      hidden_size: 128
-      device: cpu
-  rainbow: 
-      episodes: 2000
-      hidden_size: 128
   caviglione: 
-      episodes: 2000
-      hidden_size: 128
-  convexrank:
-      migration_penalty: 1
-  convexrankall:
+      episodes: 100
+      hidden_size: 256
+  convex:
       migration_penalty: 1
       W: 30

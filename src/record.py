@@ -4,10 +4,10 @@ import src.utils as utils
 
 class Record:
 
-    def __init__(self, agent, env_config, training_config):
+    def __init__(self, agent, env_config, agent_config):
         self.agent = agent
         self.env_config = env_config if isinstance(env_config, dict) else vars(env_config)
-        self.training_config = training_config if isinstance(training_config, dict) else vars(training_config)
+        self.agent_config = agent_config if isinstance(agent_config, dict) else None
 
         # Below records the info for each step in testing.
         self.cpu = list[float]()
@@ -43,11 +43,11 @@ class Record:
             for end in self.vm_arrival_steps[vm][1:]:
                 end -= 2 # Note that vm_placements starts from timestep 2
                 spline = vm_status[start:end]
-                unique_vms_placement.append(spline[spline > -2])
+                unique_vms_placement.append(spline[spline <= self.env_config['pms']])
                 start = end
             spline = vm_status[start:]
-            assert spline[spline > -2].size != 0, spline[spline > -2]
-            unique_vms_placement.append(spline[spline > -2])
+            assert spline[spline <= self.env_config['pms']].size != 0, spline[spline <= self.env_config['pms']]
+            unique_vms_placement.append(spline[spline <= self.env_config['pms']])
         return unique_vms_placement 
 
     @property
@@ -55,7 +55,7 @@ class Record:
         total = 0
         for vm in self.unique_vms_placement:
             vm = np.array(vm)
-            total += np.count_nonzero(vm > -1)
+            total += np.count_nonzero(vm < self.env_config['pms'])
         return total
 
     @property
@@ -63,7 +63,7 @@ class Record:
         flat_pending_rates = []
         for status in self.unique_vms_placement:
             status = np.array(status)
-            running_status = np.where(status > -1)[0]
+            running_status = np.where(status < self.env_config['pms'])[0]
             allocated_at = running_status[0] if running_status.size > 0 else None
             if allocated_at: 
                 rate = np.around((allocated_at + 1.0) / len(status) , 3)
@@ -77,10 +77,10 @@ class Record:
         flat_slowdown_rates = []
         for status in self.unique_vms_placement:
             status = np.array(status)
-            running_status = np.where(status > -1)[0]
+            running_status = np.where(status < self.env_config['pms'])[0]
             allocated_at = running_status[0] if running_status.size > 0 else None
             if allocated_at:
-                slowdown_steps = np.count_nonzero(status[allocated_at:] == -1)
+                slowdown_steps = np.count_nonzero(status[allocated_at:] == self.env_config['pms'])
                 vm_life = len(status) - allocated_at - 1
                 rate = 0 if vm_life == 0 else np.around(slowdown_steps / vm_life, 3)
                 flat_slowdown_rates.append(rate)
@@ -94,7 +94,7 @@ class Record:
         life = []
         for status in self.unique_vms_placement:
             status = np.array(status)
-            running_status = np.where(status > -1)[0]
+            running_status = np.where(status < self.env_config['pms'])[0]
             allocated_at = running_status[0] if running_status.size > 0 else None
             if allocated_at:
                 life.append(len(status) - allocated_at - 1)
@@ -149,7 +149,7 @@ class Record:
 
     @classmethod 
     def import_record(cls, agent: str, jsondict: dict):
-        record = cls(agent, jsondict['env_config'], jsondict['training_config']) 
+        record = cls(agent, jsondict['env_config'], jsondict['agent_config']) 
 
         record.cpu = jsondict['cpu']
         record.memory = jsondict['memory']
