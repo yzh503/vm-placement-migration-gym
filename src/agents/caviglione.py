@@ -27,13 +27,14 @@ class ReplayBuffer:
         size: int, 
         batch_size: int = 32, 
         n_step: int = 1, 
-        gamma: float = 0.99
+        gamma: float = 0.99,
+        device: str = "cpu"
     ):
-        self.obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
-        self.next_obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
-        self.acts_buf = np.zeros([size], dtype=np.float32)
-        self.rews_buf = np.zeros([size], dtype=np.float32)
-        self.done_buf = np.zeros(size, dtype=np.float32)
+        self.obs_buf = torch.zeros([size, obs_dim], dtype=torch.float32).to(device)
+        self.next_obs_buf = torch.zeros([size, obs_dim], dtype=torch.float32).to(device)
+        self.acts_buf = torch.zeros([size], dtype=torch.int).to(device)
+        self.rews_buf = torch.zeros([size], dtype=torch.float32).to(device)
+        self.done_buf = torch.zeros(size, dtype=torch.int).to(device)
         self.max_size, self.batch_size = size, batch_size
         self.ptr, self.size, = 0, 0
         
@@ -44,12 +45,12 @@ class ReplayBuffer:
 
     def store(
         self, 
-        obs: np.ndarray, 
-        act: np.ndarray, 
+        obs: torch.Tensor, 
+        act: torch.Tensor, 
         rew: float, 
-        next_obs: np.ndarray, 
-        done: bool,
-    ) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]:
+        next_obs: torch.Tensor, 
+        done: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor, float, torch.Tensor, bool]:
         transition = (obs, act, rew, next_obs, done)
         self.n_step_buffer.append(transition)
 
@@ -137,12 +138,13 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         alpha: float = 0.6,
         n_step: int = 1, 
         gamma: float = 0.99,
+        device: str = "cpu"
     ):
         """Initialization."""
         assert alpha >= 0
         
         super(PrioritizedReplayBuffer, self).__init__(
-            obs_dim, size, batch_size, n_step, gamma
+            obs_dim, size, batch_size, n_step, gamma, device
         )
         self.max_priority, self.tree_ptr = 1.0, 0
         self.alpha = alpha
@@ -403,13 +405,11 @@ class CaviglioneAgent(Base):
         obs_dim = self.env.observation_space.shape[0]
         self.n_actions = 4
         self.beta = config.beta
-        self.memory = PrioritizedReplayBuffer(obs_dim, config.memory_size, config.batch_size, alpha=config.alpha)
+        self.memory = PrioritizedReplayBuffer(obs_dim, config.memory_size, config.batch_size, alpha=config.alpha, device=self.device)
         self.use_n_step = True if config.n_step > 1 else False
         if self.use_n_step:
             self.n_step = config.n_step
-            self.memory_n = ReplayBuffer(
-                obs_dim, config.memory_size, config.batch_size, n_step=config.n_step, gamma=config.gamma
-            )
+            self.memory_n = ReplayBuffer(obs_dim, config.memory_size, config.batch_size, n_step=config.n_step, gamma=config.gamma, device=self.device)
 
         # Categorical DQN parameters
         self.support = torch.linspace(config.v_min, config.v_max, config.atom_size).to(self.device)
@@ -458,7 +458,7 @@ class CaviglioneAgent(Base):
                 else:
                     i_vm = None
                 _, envaction = self._convert_action(previous_obs, i_vm, action)
-                obs, reward, terminated, truncated, info = self.env.step(envaction.numpy())
+                obs, reward, terminated, truncated, info = self.env.step(envaction.cpu().numpy())
                 obs = torch.from_numpy(obs).float().to(self.device)
                 done = terminated or truncated
 
@@ -657,11 +657,11 @@ class CaviglioneAgent(Base):
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray], gamma: float) -> torch.Tensor:
         """Return categorical dqn loss."""
         device = self.device  # for shortening the following lines
-        state = torch.FloatTensor(samples["obs"]).to(device)
-        next_state = torch.FloatTensor(samples["next_obs"]).to(device)
-        action = torch.LongTensor(samples["acts"]).to(device)
-        reward = torch.FloatTensor(samples["rews"].reshape(-1, 1)).to(device)
-        done = torch.FloatTensor(samples["done"].reshape(-1, 1)).to(device)
+        state = samples["obs"]
+        next_state = samples["next_obs"]
+        action = samples["acts"]
+        reward = samples["rews"].reshape(-1, 1)
+        done = samples["done"].reshape(-1, 1)
         
         # Categorical DQN algorithm
         delta_z = float(self.config.v_max - self.config.v_min) / (self.config.atom_size - 1)
