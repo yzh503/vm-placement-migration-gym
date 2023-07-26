@@ -3,9 +3,7 @@ from typing import Optional, Tuple
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from torch.distributions.multivariate_normal import MultivariateNormal
-from torch.distributions.kl import kl_divergence
-import torch
+from scipy.linalg import sqrtm
 
 @dataclass
 class EnvConfig(object):
@@ -21,6 +19,17 @@ class EnvConfig(object):
     sequence: str = "uniform"
     cap_target_util: bool = True
     beta: int = 0.5
+
+def kl_divergence(p_mean, p_cov, q_mean, q_cov):
+    p_dim = p_mean.shape[0]
+    det_p_cov = np.linalg.det(p_cov)
+    det_q_cov = np.linalg.det(q_cov)
+    q_cov_inv = np.linalg.inv(q_cov)
+    trace_term = np.trace(np.dot(q_cov_inv, p_cov))
+    diff = p_mean - q_mean
+    m1 = np.dot(np.dot(diff.T, q_cov_inv), diff)
+    m2 = np.trace(np.dot(q_cov_inv, p_cov))
+    return 0.5 * (np.log(det_q_cov/det_p_cov) - p_dim + trace_term + m1 - m2)
 
 class VmEnv(gym.Env):
 
@@ -115,7 +124,7 @@ class VmEnv(gym.Env):
         
     def eval(self, eval_mode=True):
         self.eval_mode = eval_mode  
-  
+
     def _process_action(self):
         # Action is predicted against the observation, so update arrival and terminatino after the action.
         self._run_vms()
@@ -128,21 +137,36 @@ class VmEnv(gym.Env):
         
 
         if self.config.reward_function == "kl": # KL divergence between from approximator to true
-            self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
-            self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+            current_cpu = np.mean(self.cpu)
+            current_memory = np.mean(self.memory)
+            current_mean = np.array([current_cpu, current_memory])
+            cpu_vars = np.var(self.cpu)
+            memory_vars = np.var(self.memory)
+            if cpu_vars == 0:
+                cpu_vars = 1e-6
+            if memory_vars == 0:
+                memory_vars = 1e-6
+            current_cov = np.array([[cpu_vars, 0], [0, memory_vars]])
 
+            self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
             if self.config.cap_target_util and self.target_cpu_mean > 1: 
                 self.target_cpu_mean = 1.0
-
+            self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
             if self.config.cap_target_util and self.target_memory_mean > 1: 
                 self.target_memory_mean = 1.0
+            target_mean = np.array([self.target_cpu_mean, self.target_memory_mean])
+            target_cpu_var = np.var(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) 
+            target_memory_var = np.var(self.vm_memory[self.vm_placement < self.NULL_STATUS])
+            if target_cpu_var == 0:
+                target_cpu_var = 1e-6
+            if target_memory_var == 0:
+                target_memory_var = 1e-6
+            target_cov = np.array([[target_cpu_var, 0], [0, target_memory_var]])
 
-            current = MultivariateNormal(loc=torch.tensor([np.mean(self.cpu), np.mean(self.memory)]), covariance_matrix=self.covariance_matrix)
-            target = MultivariateNormal(loc=torch.tensor([self.target_cpu_mean, self.target_memory_mean]), covariance_matrix=self.covariance_matrix)
             if self.target_cpu_mean == 0 or self.target_memory_mean == 0:
                 reward = 0.0
             else:
-                reward = - kl_divergence(target,current).item()      
+                reward = - kl_divergence(target_mean, target_cov, current_mean, current_cov)
         elif self.config.reward_function == "utilisation": 
             reward = self.config.beta * np.sum(self.cpu) + (1 - self.config.beta) * np.sum(self.memory)
         elif self.config.reward_function == "waiting_ratio":
@@ -224,8 +248,8 @@ class VmEnv(gym.Env):
             self.vm_memory_sequence = np.around(self.rng2.uniform(low=0.25, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.625
 
         # compute covariance matrix that includes vm_cpu_sequence and vm_memory_sequence
-        matrix = np.array([self.vm_cpu_sequence[:2000], self.vm_memory_sequence[:2000]]).reshape([2000, 2])
-        self.covariance_matrix = np.cov(matrix)
+        matrix = np.stack((self.vm_cpu_sequence[:2000], self.vm_memory_sequence[:2000]), axis=-1)
+        self.covariance_matrix = np.cov(matrix.T)
 
         # If requests drop, it will require a seq length longer than max_steps. This will only work when drop rate < 50%
         return self._get_obs(), self._get_info()

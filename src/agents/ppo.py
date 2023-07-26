@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
+import math
 from src.vm_gym.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
 from src.agents.base import Base, Config
@@ -314,10 +315,10 @@ class PPOAgent(Base):
                 nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
                 self.optimizer.step()
 
-        if self.writer: 
-            self.writer.add_scalar('Training/loss_clipped', loss_clipped.item(), self.total_steps)
-            self.writer.add_scalar('Training/loss_vf', loss_vf.item(), self.total_steps)
-            self.writer.add_scalar('Training/entropy', entropy.mean().item(), self.total_steps)
-            self.writer.add_scalar('Training/loss', loss.item(), self.total_steps)
-            self.writer.add_scalar('Training/kl', -log_ratios.mean().item(), self.total_steps)
-            self.writer.add_scalar('Training/clipfracs', np.mean(clipfracs), self.total_steps)
+                if epoch == self.config.k_epochs - 1 and bi == math.ceil(self.config.batch_size / self.config.minibatch_size) and self.writer: 
+                    self.writer.add_scalar('Training/loss_clipped', loss_clipped.item(), self.total_steps)
+                    self.writer.add_scalar('Training/loss_vf', loss_vf.item(), self.total_steps)
+                    self.writer.add_scalar('Training/entropy', entropy.mean().item(), self.total_steps)
+                    self.writer.add_scalar('Training/loss', loss.item(), self.total_steps)
+                    self.writer.add_scalar('Training/kl', -log_ratios.mean().item(), self.total_steps)
+                    self.writer.add_scalar('Training/clipfracs', np.mean(clipfracs), self.total_steps)
