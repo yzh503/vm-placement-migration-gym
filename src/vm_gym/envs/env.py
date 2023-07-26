@@ -66,7 +66,6 @@ class VmEnv(gym.Env):
         self.memory[pm] += self.vm_memory[vm]
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
-        assert self.action_space.contains(action), f"Invalid action received: " + str(action)
         action = action.copy()
         actions_valid = np.zeros_like(action)
         for vm, move_to_pm in enumerate(action): 
@@ -122,24 +121,24 @@ class VmEnv(gym.Env):
         self._run_vms()
         self._accept_vm_requests() 
         
-        vms_arrived = np.count_nonzero(self.vm_placement < self.config.pms + 1)
+        vms_arrived = np.count_nonzero(self.vm_placement <= self.config.pms)
         vms_waiting = np.count_nonzero(self.vm_placement == self.config.pms)
         self.waiting_ratio = vms_waiting / vms_arrived if vms_arrived > 0 else 0
         self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms
-        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
-        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
-
-        if self.config.cap_target_util and self.target_cpu_mean > 1: 
-            self.target_cpu_mean = 1.0
-
-        if self.config.cap_target_util and self.target_memory_mean > 1: 
-            self.target_memory_mean = 1.0
+        
 
         if self.config.reward_function == "kl": # KL divergence between from approximator to true
-            # std = np.std(self.cpu) 
-            # target_sd = np.sqrt(self.config.var)
-            current = MultivariateNormal(loc=torch.tensor([np.mean(self.cpu), np.mean(self.memory)]), covariance_matrix=torch.eye(2))
-            target = MultivariateNormal(loc=torch.tensor([self.target_cpu_mean, self.target_memory_mean]), covariance_matrix=torch.eye(2))
+            self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+            self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+
+            if self.config.cap_target_util and self.target_cpu_mean > 1: 
+                self.target_cpu_mean = 1.0
+
+            if self.config.cap_target_util and self.target_memory_mean > 1: 
+                self.target_memory_mean = 1.0
+
+            current = MultivariateNormal(loc=torch.tensor([np.mean(self.cpu), np.mean(self.memory)]), covariance_matrix=self.covariance_matrix)
+            target = MultivariateNormal(loc=torch.tensor([self.target_cpu_mean, self.target_memory_mean]), covariance_matrix=self.covariance_matrix)
             if self.target_cpu_mean == 0 or self.target_memory_mean == 0:
                 reward = 0.0
             else:
@@ -160,7 +159,10 @@ class VmEnv(gym.Env):
         else:
             terminated = self.timestep >= self.config.training_steps
 
-        info = self._get_info()
+        if self.eval_mode:
+            info = self._get_info()
+        else: 
+            info = {} # save time
 
         return obs, reward, terminated, info
 
@@ -209,8 +211,8 @@ class VmEnv(gym.Env):
             self.vm_cpu_sequence = np.tile(np.concatenate((np.repeat(0.15, 6 * self.config.eval_steps // 100), np.repeat(0.34, 8 * self.config.eval_steps // 100), np.repeat(0.51, 6 * self.config.eval_steps // 100))), max_steps // 10).tolist()
             self.vm_memory_sequence = np.tile(np.concatenate((np.repeat(0.15, 6 * self.config.eval_steps // 100), np.repeat(0.34, 8 * self.config.eval_steps // 100), np.repeat(0.51, 6 * self.config.eval_steps // 100))), max_steps // 10).tolist()
         elif self.config.sequence == 'multinomial':
-            self.vm_cpu_sequence = self.rng1.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps+1, replace=True) # uniform discrete
-            self.vm_memory_sequence = self.rng2.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps+1, replace=True) # uniform discrete
+            self.vm_cpu_sequence = self.rng1.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps*2, replace=True) # uniform discrete
+            self.vm_memory_sequence = self.rng2.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps*2, replace=True) # uniform discrete
         elif self.config.sequence == 'uniform':
             self.vm_cpu_sequence = np.around(self.rng1.uniform(low=0.1, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.55
             self.vm_memory_sequence = np.around(self.rng2.uniform(low=0.1, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.55
@@ -220,9 +222,12 @@ class VmEnv(gym.Env):
         elif self.config.sequence == 'highuniform':
             self.vm_cpu_sequence = np.around(self.rng1.uniform(low=0.25, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.625
             self.vm_memory_sequence = np.around(self.rng2.uniform(low=0.25, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.625
-        
-        # If requests drop, it will require a seq length longer than max_steps. This will only work when drop rate < 50%
 
+        # compute covariance matrix that includes vm_cpu_sequence and vm_memory_sequence
+        matrix = np.array([self.vm_cpu_sequence[:2000], self.vm_memory_sequence[:2000]]).reshape([2000, 2])
+        self.covariance_matrix = np.cov(matrix)
+
+        # If requests drop, it will require a seq length longer than max_steps. This will only work when drop rate < 50%
         return self._get_obs(), self._get_info()
 
     def render(self, mode: str = 'ansi', close: bool = False):
@@ -243,20 +248,20 @@ class VmEnv(gym.Env):
         pass
 
     def _run_vms(self):
-        vm_running = np.argwhere(np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement < self.WAIT_STATUS))
-        if vm_running.size > 0:
-            self.vm_remaining_runtime[vm_running] -= 1  
+        condition = np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement < self.WAIT_STATUS)
+        self.vm_remaining_runtime[condition] -= 1
+        if np.any(condition):
+            self.vm_waiting_time[condition] += 1
 
-        vm_waiting = np.argwhere(self.vm_placement == self.WAIT_STATUS)
-        self.vm_waiting_time[vm_waiting] += 1
-            
-        vm_to_terminate = np.argwhere(np.logical_and(self.vm_remaining_runtime == 0, self.vm_placement < self.WAIT_STATUS)).flatten()
+        self.vm_waiting_time[self.vm_placement == self.WAIT_STATUS] += 1
+
+        condition_terminate = np.logical_and(self.vm_remaining_runtime == 0, self.vm_placement < self.WAIT_STATUS)
+        vm_to_terminate = np.flatnonzero(condition_terminate)
 
         if vm_to_terminate.size > 0:
             pms_to_free_up = self.vm_placement[vm_to_terminate]
             self.vm_placement[vm_to_terminate] = self.NULL_STATUS
 
-            # Multiple VMs could be on the same PM, so use a loop to free up iteratively
             for vm, pm in zip(vm_to_terminate, pms_to_free_up): 
                 self.cpu[pm] -= self.vm_cpu[vm]
                 self.memory[pm] -= self.vm_memory[vm]
@@ -270,12 +275,14 @@ class VmEnv(gym.Env):
 
         self.cpu[self.cpu < 1e-7] = 0 # precision problem 
         self.memory[self.memory < 1e-7] = 0 # precision problem
+
         
     def _accept_vm_requests(self):
         arrivals = self.rng3.poisson(self.config.arrival_rate)
         self.total_requests += arrivals
-        placed_arrivals = min(arrivals, self.vm_placement[self.vm_placement ==  self.NULL_STATUS].size)
-        to_accept = np.argwhere(self.vm_placement == self.NULL_STATUS).flatten()[:placed_arrivals]
+        null_vm_mask = self.vm_placement == self.NULL_STATUS
+        placed_arrivals = min(arrivals, null_vm_mask.sum())
+        to_accept = np.flatnonzero(null_vm_mask)[:placed_arrivals]
         self.vm_placement[to_accept] = self.config.pms
 
         vm_cpu_list = self.vm_cpu_sequence[:to_accept.size]
@@ -295,7 +302,7 @@ class VmEnv(gym.Env):
             self.vm_arrival_steps[i].append(self.timestep + 1) # Arrival at next step
 
     def _get_obs(self):
-        return np.hstack([self.vm_placement, self.vm_cpu, self.vm_memory, self.cpu, self.memory]).astype(np.float32)
+        return np.concatenate([self.vm_placement, self.vm_cpu, self.vm_memory, self.cpu, self.memory], dtype=np.float32)
     
     def _get_info(self):
         return {
@@ -317,7 +324,6 @@ class VmEnv(gym.Env):
             "target_memory_mean": self.target_memory_mean,
             'total_cpu_requested': self.total_cpu_requested,
             'total_memory_requested': self.total_memory_requested,
-            'rank': self._get_rank(),
         }
 
     def _get_rank(self):

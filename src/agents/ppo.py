@@ -4,7 +4,6 @@ from tqdm import tqdm
 import numpy as np
 from src.vm_gym.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
-from torch.optim import lr_scheduler
 from src.agents.base import Base, Config
 from dataclasses import dataclass
 import gymnasium
@@ -106,12 +105,10 @@ class MlpShared(nn.Module):
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
-            action = torch.stack([dist.sample() for dist in multi_dists])
-        else: 
-            action = action.T
-        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
-        entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0), entropy.sum(dim=0)
+            action = torch.cat([dist.sample() for dist in multi_dists])
+        logprob = torch.cat([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
+        entropy = torch.cat([dist.entropy() for dist in multi_dists])
+        return action, logprob.sum(dim=0), entropy.sum(dim=0)
     
     def get_det_action(self, obs, action=None):
         logits = self.actor(self.shared_network(obs))
@@ -144,15 +141,14 @@ class MlpSeparate(nn.Module):
     def get_action(self, obs, action=None, mask=None):
         logits = self.actor(obs) # With batch calculation, logits could be inconsistent from non-batch calculation at scale of 1e-8 ~ 1e-4 due to limited precision. 
         if mask is not None:
-            assert mask.any(), mask
             masks = mask.reshape(logits.shape).bool()
             logits = torch.where(masks, logits, -1e8)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
             action = torch.tensor([dist.sample() for dist in multi_dists], device=obs.device)
-        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action.view(-1, 1), multi_dists)])
-        entropy = torch.stack([dist.entropy() for dist in multi_dists])
+        logprob = torch.cat([dist.log_prob(a) for a, dist in zip(action.view(-1, 1), multi_dists)])
+        entropy = torch.cat([dist.entropy() for dist in multi_dists])
         return action, logprob.sum(dim=0), entropy.sum(dim=0)
     
     def get_det_action(self, obs, action=None):
@@ -228,7 +224,7 @@ class PPOAgent(Base):
                 mask = torch.tensor(self.env.get_action_mask(), device=self.config.device) if self.config.masked else None
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), mask=mask) # pass in a batch of size 1
                 action = torch.flatten(action)
-                next_obs, reward, done, truncated, info = self.env.step(action.cpu().numpy())
+                next_obs, reward, done, _, _ = self.env.step(action.cpu().numpy())
                 next_obs = torch.tensor(next_obs, device=self.config.device)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
                 

@@ -18,11 +18,11 @@ agents:
       batch_size: 500
       minibatch_size: 100
       migration_discount: 0.25
-      device: cuda 
+      device: cpu 
   caviglione: 
       episodes: 100
       hidden_size: 256
-      device: cuda
+      device: cpu
   convex:
       migration_penalty: 1
       W: 30
