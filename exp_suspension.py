@@ -11,7 +11,7 @@ import time
 
 def evaluate(args):
     agent, weightspath, load, sr = args
-    configfile = open('config/r1.yml')
+    configfile = open('config/wr.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -75,19 +75,19 @@ if __name__ == '__main__':
 
     load = exp.load
     for sr in np.arange(100, 4100, 200):
-        args.append(('caviglione', 'weights/caviglione-r1.pt', load, sr))
+        args.append(('caviglione', 'weights/caviglione-wr.pt', load, sr))
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-r1.pt', load, sr))
+        args.append(('ppo', 'weights/ppo-wr.pt', load, sr))
         args.append(('convex', '', load, sr))
 
 
     sr = exp.service_length
     for load in np.arange(0.2, 1.1, 0.1):
-        args.append(('caviglione', 'weights/caviglione-r1.pt', load, sr))
+        args.append(('caviglione', 'weights/caviglione-wr.pt', load, sr))
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-r1.pt', load, sr))
+        args.append(('ppo', 'weights/ppo-wr.pt', load, sr))
         args.append(('convex', '', load, sr))
 
     manager = multiprocessing.Manager()

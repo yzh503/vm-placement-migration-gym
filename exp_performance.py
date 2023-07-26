@@ -17,7 +17,7 @@ def evaluate_wrapper(args, records):
 def evaluate(args, results):
 
     agent, jobname, weightspath, load = args
-    configfile = open('config/r1.yml')
+    configfile = open('config/wr.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -143,15 +143,15 @@ if __name__ == '__main__':
     results = {'step': [], 'load': [], 'agent': [], 'cpu_mean': [], 'cpu_var': [], 'memory_mean': [], 'memory_var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Load, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-r1.pt', exp.load), results)
-    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-r1.pt', exp.load), results)
+    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-wr.pt', exp.load), results)
+    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-wr.pt', exp.load), results)
     to_print += evaluate(('firstfit', 'firstfit',None, exp.load), results)
     to_print += evaluate(('bestfit', 'bestfit',None, exp.load), results)
     to_print += evaluate(('convex', 'convex', None, exp.load), results)
 
 
-    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-r1-low.pt', 0.75), results)
-    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-r1-low.pt', 0.75), results)
+    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-wr-low.pt', 0.75), results)
+    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-wr-low.pt', 0.75), results)
     to_print += evaluate(('firstfit', 'firstfit', None, 0.75), results)
     to_print += evaluate(('bestfit', 'bestfit', None, 0.75), results)
     to_print += evaluate(('convex', 'convex', None, 0.75), results)

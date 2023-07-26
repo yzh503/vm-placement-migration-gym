@@ -89,7 +89,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convex", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
-    parser.add_argument("-c", "--config", default='config/r3.yml', help = "Configuration for environment and agent")
+    parser.add_argument("-c", "--config", default='config/kl.yml', help = "Configuration for environment and agent")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")
     parser.add_argument("-j", "--jobname", help="Job name in tensorboard")

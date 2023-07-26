@@ -11,7 +11,7 @@ import time
 
 def evaluate(args):
     agent, weightspath, rewardfn, migration_discount = args
-    configfile = open('config/r1.yml')
+    configfile = open('config/wr.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -66,15 +66,15 @@ if __name__ == '__main__':
     args = []
 
     for migration_discount in np.arange(0.0, 0.05, 0.01):
-        args.append(('ppo-r1', 'weights/ppo-r1.pt', 'waiting_ratio', migration_discount))
-        args.append(('ppo-r2', 'weights/ppo-r2.pt', 'utilisation', migration_discount))
-        args.append(('ppo-r3', 'weights/ppo-r3.pt', 'kl', migration_discount))
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'waiting_ratio', migration_discount))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'utilisation', migration_discount))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
 
 
     for migration_discount in np.arange(0.0, 1.05, 0.05):
-        args.append(('ppo-r1', 'weights/ppo-r1.pt', 'waiting_ratio', migration_discount))
-        args.append(('ppo-r2', 'weights/ppo-r2.pt', 'utilisation', migration_discount))
-        args.append(('ppo-r3', 'weights/ppo-r3.pt', 'kl', migration_discount))
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'waiting_ratio', migration_discount))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'utilisation', migration_discount))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
 
 
 

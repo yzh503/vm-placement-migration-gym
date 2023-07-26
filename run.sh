@@ -1,9 +1,9 @@
 #!/bin/sh
-python main.py -e -c config/r1.yml -a ppo -w weights/ppo-r1.pt -o results/ppo-r1.json -l tensorboard -j ppo-r1 &
+python main.py -e -c config/wr.yml -a ppo -w weights/ppo-wr.pt -o results/ppo-wr.json -l tensorboard -j ppo-wr &
 pid1=$!
-python main.py -e -c config/r2.yml -a ppo -w weights/ppo-r2.pt -o results/ppo-r2.json -l tensorboard -j ppo-r2 &
+python main.py -e -c config/ut.yml -a ppo -w weights/ppo-ut.pt -o results/ppo-ut.json -l tensorboard -j ppo-ut &
 pid2=$!
-python main.py -e -c config/r3.yml -a ppo -w weights/ppo-r3.pt -o results/ppo-r3.json -l tensorboard -j ppo-r3 &
+python main.py -e -c config/kl.yml -a ppo -w weights/ppo-kl.pt -o results/ppo-kl.json -l tensorboard -j ppo-kl &
 pid3=$!
 
 wait $pid1
@@ -12,11 +12,11 @@ wait $pid3
 
 python exp_migration_ratio.py
 
-python main.py -e -c config/r1.yml -a caviglione -w weights/caviglione-r1.pt -o results/caviglione-r1.json -l tensorboard -j caviglione-r1 & 
+python main.py -e -c config/wr.yml -a caviglione -w weights/caviglione-wr.pt -o results/caviglione-wr.json -l tensorboard -j caviglione-wr & 
 pid1=$!
-python main.py -e -c config/r2.yml -a caviglione -w weights/caviglione-r2.pt -o results/caviglione-r2.json -l tensorboard -j caviglione-r2 &
+python main.py -e -c config/ut.yml -a caviglione -w weights/caviglione-ut.pt -o results/caviglione-ut.json -l tensorboard -j caviglione-ut &
 pid2=$! 
-python main.py -e -c config/r3.yml -a caviglione -w weights/caviglione-r3.pt -o results/caviglione-r3.json -l tensorboard -j caviglione-r3 &
+python main.py -e -c config/kl.yml -a caviglione -w weights/caviglione-kl.pt -o results/caviglione-kl.json -l tensorboard -j caviglione-kl &
 pid3=$!
 
 wait $pid1
