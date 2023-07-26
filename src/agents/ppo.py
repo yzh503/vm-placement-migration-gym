@@ -16,7 +16,6 @@ class PPOConfig(Config):
     migration_discount: float = 0.1
     masked: bool = True
     lr: float = 3e-5
-    lr_lambda: float = 1
     gamma: float = 0.99 # GAE parameter
     lamda: float = 0.98 # GAE parameter
     ent_coef: float = 0.01 # Entropy coefficient
@@ -143,7 +142,7 @@ class MlpSeparate(nn.Module):
     
     # mask is a boolean tensor with the same shape as your action space, where True indicates an invalid action.
     def get_action(self, obs, action=None, mask=None):
-        logits = self.actor(obs)
+        logits = self.actor(obs) # With batch calculation, logits could be inconsistent from non-batch calculation at scale of 1e-8 ~ 1e-4 due to limited precision. 
         if mask is not None:
             assert mask.any(), mask
             masks = mask.reshape(logits.shape).bool()
@@ -151,12 +150,10 @@ class MlpSeparate(nn.Module):
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
-            action = torch.stack([dist.sample() for dist in multi_dists])
-        else: 
-            action = action.T
-        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action, multi_dists)]) # Very subtle difference on one vs batch due to stochasticity
+            action = torch.tensor([dist.sample() for dist in multi_dists], device=obs.device)
+        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action.view(-1, 1), multi_dists)])
         entropy = torch.stack([dist.entropy() for dist in multi_dists])
-        return action.T, logprob.sum(dim=0), entropy.sum(dim=0)
+        return action, logprob.sum(dim=0), entropy.sum(dim=0)
     
     def get_det_action(self, obs, action=None):
         logits = self.actor(obs)
@@ -182,13 +179,13 @@ class PPOAgent(Base):
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         if self.config.masked:
-            mask = torch.Tensor(self.env.get_action_mask()).to(self.config.device)
+            mask = torch.tensor(self.env.get_action_mask(), dtype=bool, device=self.config.device)
             for row in range(self.env.config.vms):
                 if mask[row, -2] and np.random.rand() > self.config.migration_discount:
                     mask[row, -2] = False
         else: 
             mask = None
-        obs = torch.Tensor(obs).float().to(self.config.device).unsqueeze(0) # a batch of size 1
+        obs = torch.tensor(obs, device=self.config.device).unsqueeze(0) # a batch of size 1
         if self.config.det:
             action = self.model.get_det_action(obs)
         else:
@@ -218,25 +215,21 @@ class PPOAgent(Base):
         done_batch = torch.zeros(self.config.batch_size, dtype=int, device=self.config.device)
         i_batch = 0
 
-    
-        # obs_normalizer = ObsNormalizer(shape=self.obs_dim) # Observation normalization 
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
-
-        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: self.config.lr_lambda) 
 
         for i_episode in pbar1:
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
-            obs = torch.Tensor(obs).float().to(self.config.device)
+            obs = torch.tensor(obs, device=self.config.device)
             done = False
             pbar2 = tqdm(total=int(self.env.config.training_steps), disable=not bool(self.config.training_progress_bar), desc='Episode', leave=False)
             while not done:
-                mask = torch.Tensor(self.env.get_action_mask()).to(self.config.device) if self.config.masked else None
+                mask = torch.tensor(self.env.get_action_mask(), device=self.config.device) if self.config.masked else None
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), mask=mask) # pass in a batch of size 1
                 action = torch.flatten(action)
                 next_obs, reward, done, truncated, info = self.env.step(action.cpu().numpy())
-                next_obs = torch.Tensor(next_obs).float().to(self.config.device)
+                next_obs = torch.tensor(next_obs, device=self.config.device)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
                 
                 if self.config.masked:
@@ -251,7 +244,6 @@ class PPOAgent(Base):
 
                 if i_batch >= self.config.batch_size:
                     self.update(mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
-                    scheduler.step()
                     i_batch = 0
                 
                 obs = next_obs
@@ -262,7 +254,6 @@ class PPOAgent(Base):
             ep_returns[i_episode] = current_ep_reward
             if self.writer: 
                 self.writer.add_scalar('Training/ep_return', current_ep_reward, i_episode)
-                self.writer.add_scalar('Training/lr', scheduler.get_last_lr()[0], i_episode)
 
             if i_episode > return_factor: 
                 pbar1.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
@@ -300,7 +291,7 @@ class PPOAgent(Base):
                 _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action=action_batch[minibatch], mask=mask_minibatch)
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
-                #assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # newlogprob == logprob_batch in epoch 1 minibatch 1.
+                #assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # reconstruct logprobs in epoch 1 minibatch 1.
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())

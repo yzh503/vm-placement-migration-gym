@@ -39,6 +39,8 @@ def run(args: Args) -> Record:
     torch.manual_seed(env_config['seed'])
     random.seed(env_config['seed'])
     np.random.seed(env_config['seed'])
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(env_config['seed'])
     torch.set_float32_matmul_precision('high')
 
     env = gym.make("VmEnv-v1", config=EnvConfig(**env_config))

@@ -15,11 +15,14 @@ agents:
   ppo: 
       episodes: 100
       hidden_size: 256
+      batch_size: 500
+      minibatch_size: 100
       migration_discount: 0.25
-      device: cpu 
+      device: cuda 
   caviglione: 
       episodes: 100
       hidden_size: 256
+      device: cuda
   convex:
       migration_penalty: 1
       W: 30
