@@ -135,8 +135,9 @@ class VmEnv(gym.Env):
         self.waiting_ratio = vms_waiting / vms_arrived if vms_arrived > 0 else 0
         self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms
         
-
-        if self.config.reward_function == "kl": # KL divergence between from approximator to true
+        if not (self.vm_placement < self.NULL_STATUS).any(): # No VMs running
+            reward = 0.0
+        elif self.config.reward_function == "kl": # KL divergence between from approximator to true
             current_cpu = np.mean(self.cpu)
             current_memory = np.mean(self.memory)
             current_mean = np.array([current_cpu, current_memory])
@@ -348,6 +349,7 @@ class VmEnv(gym.Env):
             "target_memory_mean": self.target_memory_mean,
             'total_cpu_requested': self.total_cpu_requested,
             'total_memory_requested': self.total_memory_requested,
+            'rank': self._get_rank()
         }
 
     def _get_rank(self):
