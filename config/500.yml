@@ -1,0 +1,28 @@
+environment:  
+  pms: 100
+  vms: 250
+  var: 0.01
+  service_length: 500
+  arrival_rate: 0.182 # 100% system load: pms / distribution expectation / service length 
+  training_steps: 5000
+  eval_steps: 1000
+  seed: 0
+  reward_function: wr
+  cap_target_util: true
+  sequence: "uniform"
+  beta: 0.5
+agents: 
+  ppo: 
+      episodes: 400
+      hidden_size: 512
+      batch_size: 100
+      minibatch_size: 25
+      migration_discount: 0.001
+      device: cpu 
+  caviglione: 
+      episodes: 400
+      hidden_size: 512
+      device: cpu
+  convex:
+      migration_penalty: 1
+      W: 30

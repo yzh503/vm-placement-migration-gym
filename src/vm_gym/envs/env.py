@@ -3,7 +3,6 @@ from typing import Optional, Tuple
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from scipy.linalg import sqrtm
 
 @dataclass
 class EnvConfig(object):
@@ -15,7 +14,7 @@ class EnvConfig(object):
     training_steps: int = 500
     eval_steps: int = 100000
     seed: int = 0
-    reward_function: str = "waiting_ratio"
+    reward_function: str = "wr"
     sequence: str = "uniform"
     cap_target_util: bool = True
     beta: int = 0.5
@@ -168,11 +167,11 @@ class VmEnv(gym.Env):
                 reward = 0.0
             else:
                 reward = - kl_divergence(target_mean, target_cov, current_mean, current_cov)
-        elif self.config.reward_function == "utilisation": 
+        elif self.config.reward_function == "ut": 
             reward = self.config.beta * np.sum(self.cpu) + (1 - self.config.beta) * np.sum(self.memory)
-        elif self.config.reward_function == "waiting_ratio":
+        elif self.config.reward_function == "wr":
             reward = - self.waiting_ratio 
-        elif self.config.reward_function == "waiting_steps":
+        elif self.config.reward_function == "ws":
             reward = - np.count_nonzero(self.vm_placement == self.WAIT_STATUS)
         else: 
             assert False, f'Function does not exist: {self.config.reward_function}'

@@ -31,6 +31,7 @@ def run(args: Args) -> Record:
     
     config = args.config
     env_config = config["environment"]
+    env_config['reward_function'] = args.reward
     if args.agent in config["agents"]:
         agent_config = config["agents"][args.agent]
     else:
@@ -90,6 +91,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convex", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/kl.yml', help = "Configuration for environment and agent")
+    parser.add_argument("-r", "--reward", default='wr', choices=["wr", "ut", "kl"], help = "wr: waiting ratio, ut: utilization, kl: kl divergence")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")
     parser.add_argument("-j", "--jobname", help="Job name in tensorboard")

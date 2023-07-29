@@ -22,7 +22,7 @@ def evaluate(args, results):
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.eval_steps
-    config['environment']['reward_function'] = "waiting_ratio"
+    config['environment']['reward_function'] = "wr"
     config['environment']['service_length'] = exp.service_length
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 4)
 

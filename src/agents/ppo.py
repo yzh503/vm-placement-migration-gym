@@ -14,7 +14,7 @@ class PPOConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
     migration_discount: float = 0.1
-    masked: bool = True
+    masked: bool = False
     lr: float = 3e-5
     gamma: float = 0.99 # GAE parameter
     lamda: float = 0.98 # GAE parameter
@@ -85,54 +85,23 @@ def ortho_init(layer, scale=np.sqrt(2)):
     nn.init.constant_(layer.bias, 0)
     return layer
 
-class MlpShared(nn.Module): 
-    def __init__(self, obs_dim, action_space, hidden_size):
-        super(MlpShared, self).__init__()
-        self.action_nvec = action_space.nvec
-        self.shared_network = nn.Sequential(
-            ortho_init(nn.Linear(obs_dim, hidden_size)),
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, hidden_size)),
-            nn.Tanh(),
-        )
-        self.actor = ortho_init(nn.Linear(hidden_size, self.action_nvec.sum()), scale=0.01)
-        self.critic = ortho_init(nn.Linear(hidden_size, 1), scale=1)
-
-    def get_value(self, obs):
-        return self.critic(self.shared_network(obs))
-
-    def get_action(self, obs, action=None):
-        logits = self.actor(self.shared_network(obs))
-        split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
-        multi_dists = [Categorical(logits=logits) for logits in split_logits]
-        if action is None: 
-            action = torch.cat([dist.sample() for dist in multi_dists])
-        logprob = torch.cat([dist.log_prob(a) for a, dist in zip(action, multi_dists)])
-        entropy = torch.cat([dist.entropy() for dist in multi_dists])
-        return action, logprob.sum(dim=0), entropy.sum(dim=0)
-    
-    def get_det_action(self, obs, action=None):
-        logits = self.actor(self.shared_network(obs))
-        split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
-        return torch.argmax(split_logits, dim=1)
-
-class MlpSeparate(nn.Module): 
-    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int):
-        super(MlpSeparate, self).__init__()
+class Network(nn.Module): 
+    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int, dtype: torch.dtype):
+        super(Network, self).__init__()
         self.action_nvec = action_space.nvec
         self.critic = nn.Sequential(
-            ortho_init(nn.Linear(input_size, hidden_size)),
+            ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, hidden_size)),
+            ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, 1), scale=1)
+            ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
         )
         self.actor = nn.Sequential(
-            ortho_init(nn.Linear(input_size, hidden_size)),
+            ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, hidden_size)),
+            ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, self.action_nvec.sum()), scale=0.01)
+            ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
         )
 
     def get_value(self, obs):
@@ -143,13 +112,13 @@ class MlpSeparate(nn.Module):
         logits = self.actor(obs) # With batch calculation, logits could be inconsistent from non-batch calculation at scale of 1e-8 ~ 1e-4 due to limited precision. 
         if mask is not None:
             masks = mask.reshape(logits.shape).bool()
-            logits = torch.where(masks, logits, -1e8)
+            logits = torch.where(masks, logits, -1e10)
         split_logits = torch.split(logits, self.action_nvec.tolist(), dim=1)
         multi_dists = [Categorical(logits=logits) for logits in split_logits]
         if action is None: 
-            action = torch.tensor([dist.sample() for dist in multi_dists], device=obs.device)
-        logprob = torch.cat([dist.log_prob(a) for a, dist in zip(action.view(-1, 1), multi_dists)])
-        entropy = torch.cat([dist.entropy() for dist in multi_dists])
+            action = torch.stack([dist.sample() for dist in multi_dists]).T
+        logprob = torch.stack([dist.log_prob(a) for a, dist in zip(action.T, multi_dists)])
+        entropy = torch.stack([dist.entropy() for dist in multi_dists])
         return action, logprob.sum(dim=0), entropy.sum(dim=0)
     
     def get_det_action(self, obs, action=None):
@@ -164,15 +133,15 @@ class PPOAgent(Base):
    
     def init_model(self):
         self.obs_dim = self.env.observation_space.shape[0]
-        if self.config.network_arch == 'shared':
-            self.model = MlpShared(self.obs_dim, self.env.action_space, self.config.hidden_size)
-        elif self.config.network_arch == 'separate':
-            self.model = MlpSeparate(self.obs_dim, self.env.action_space, self.config.hidden_size) 
-        else:
-            assert self.config.network_arch not in ['shared', 'separate', 'continuous']
+        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, torch.float64) 
         self.model = torch.compile(self.model).to(self.config.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.lr, eps=1e-5)
 
+    def eval(self, mode=True):
+        if mode: 
+            self.model.eval()
+        else:
+            self.model.train()
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         if self.config.masked:
@@ -205,10 +174,10 @@ class PPOAgent(Base):
         
         mask_batch = torch.zeros((self.config.batch_size,self.env.config.vms, self.env.config.pms + 2), dtype=bool, device=self.config.device)
         action_batch = torch.zeros((self.config.batch_size,self.env.action_space.nvec.size), dtype=int, device=self.config.device)
-        obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, device=self.config.device)
-        next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, device=self.config.device)
-        logprob_batch = torch.zeros(self.config.batch_size, device=self.config.device)
-        rewards_batch = torch.zeros(self.config.batch_size, device=self.config.device)
+        obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, dtype=torch.float64, device=self.config.device)
+        next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, dtype=torch.float64, device=self.config.device)
+        logprob_batch = torch.zeros(self.config.batch_size, dtype=torch.float32, device=self.config.device)
+        rewards_batch = torch.zeros(self.config.batch_size, dtype=torch.float32, device=self.config.device)
         done_batch = torch.zeros(self.config.batch_size, dtype=int, device=self.config.device)
         i_batch = 0
 
@@ -218,15 +187,16 @@ class PPOAgent(Base):
         for i_episode in pbar1:
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
-            obs = torch.tensor(obs, device=self.config.device)
+            obs = torch.tensor(obs, device=self.config.device, dtype=torch.float64)
             done = False
             pbar2 = tqdm(total=int(self.env.config.training_steps), disable=not bool(self.config.training_progress_bar), desc='Episode', leave=False)
             while not done:
                 mask = torch.tensor(self.env.get_action_mask(), device=self.config.device) if self.config.masked else None
+                
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), mask=mask) # pass in a batch of size 1
                 action = torch.flatten(action)
                 next_obs, reward, done, _, _ = self.env.step(action.cpu().numpy())
-                next_obs = torch.tensor(next_obs, device=self.config.device)
+                next_obs = torch.tensor(next_obs, device=self.config.device, dtype=torch.float64)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
                 
                 if self.config.masked:
@@ -286,9 +256,10 @@ class PPOAgent(Base):
                 adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10) # Adv normalisation
                 mask_minibatch = mask_batch[minibatch] if self.config.masked else None
                 _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action=action_batch[minibatch], mask=mask_minibatch)
+                assert newlogprob.shape == logprob_batch[minibatch].shape
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
-                #assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 5e-5),  log_ratios # reconstruct logprobs in epoch 1 minibatch 1.
+                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 1e-4),  log_ratios # reconstruct logprobs in epoch 1 minibatch 1.
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())

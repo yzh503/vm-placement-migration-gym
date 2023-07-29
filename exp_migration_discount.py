@@ -5,7 +5,6 @@ import yaml
 import numpy as np
 import multiprocessing
 from os.path import exists
-import copy 
 import exp
 import time 
 
@@ -19,11 +18,11 @@ def evaluate(args):
     config['environment']['reward_function'] = rewardfn
     config['environment']['service_length'] = exp.service_length
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
-
     config['agents']['ppo']['migration_discount'] = migration_discount
 
     args = []
-    recordname = 'data/exp_migration_discount/%s-%.2f.json' % (agent, migration_discount)
+
+    recordname = 'data/exp_migration_discount/%s-%.3f.json' % (agent, migration_discount)
     
     if exists(recordname):
         print(f"{recordname} exists")
@@ -33,7 +32,6 @@ def evaluate(args):
         f.close()
     else: 
         print(f"{recordname} does not exist")
-        config = copy.deepcopy(config)
         record = main.run(main.Args(
                     agent='ppo', 
                     config=config, 
@@ -47,13 +45,12 @@ def evaluate(args):
         record.save(recordname)
 
     to_print = '%s,' % (agent) 
-    to_print += '%.2f,' % (migration_discount) 
+    to_print += '%.3f,' % (migration_discount) 
     to_print += '%d,' % (record.served_requests[-1]) 
     to_print += '%.3f,' % (np.mean(record.pending_rates))
     to_print += '%.3f,' % (np.mean(record.slowdown_rates))
     to_print += '%.3f' % (np.max(record.slowdown_rates))
     del record
-    print(to_print + '\n')
     return to_print + '\n'
 
 
@@ -65,14 +62,19 @@ if __name__ == '__main__':
     to_print = 'Agent, Migration Discount, Total Served, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
+    for migration_discount in np.arange(0.0, 0.011, 0.001):
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_discount))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_discount))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
+
     for migration_discount in np.arange(0.0, 0.05, 0.01):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'waiting_ratio', migration_discount))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'utilisation', migration_discount))
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_discount))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_discount))
         args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
 
 
     for migration_discount in np.arange(0.0, 1.05, 0.05):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'waiting_ratio', migration_discount))
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_discount))
         args.append(('ppo-ut', 'weights/ppo-ut.pt', 'utilisation', migration_discount))
         args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
 

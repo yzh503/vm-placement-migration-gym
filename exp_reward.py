@@ -49,7 +49,7 @@ def evaluate_seeds(args):
                     debug=False))
 
     if len(args) > 0:
-        with Pool(exp.cores) as pool: 
+        with Pool(exp.multiruns) as pool: 
             for record in pool.imap_unordered(main.run, args): 
                 seed = record.env_config['seed']
                 recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
@@ -104,9 +104,9 @@ if __name__ == '__main__':
     print("Evaluating Reward Functions...")
 
     to_print = 'Reward, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "kl"))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "utilisation"))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "waiting_ratio"))
+    to_print += evaluate_seeds(('ppo', 'weights-500/ppo-wr.pt', "kl"))
+    to_print += evaluate_seeds(('ppo', 'weights-500/ppo-ut.pt', "ut"))
+    to_print += evaluate_seeds(('ppo', 'weights-500/ppo-kl.pt', "wr"))
 
     file = open('data/exp_reward/summary.csv', 'w')
     file.write(to_print)

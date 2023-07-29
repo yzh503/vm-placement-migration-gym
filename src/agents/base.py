@@ -56,9 +56,14 @@ class Base:
     def load_model(self, modelpath: str):
         raise NotImplementedError
     
+    @abstractmethod
+    def eval(self, model: bool = True):
+        raise NotImplementedError
+    
     def test(self, show: bool = False, output: str = None, debug: bool = False):
         
         self.env.eval()
+        self.eval()
         obs, info = self.env.reset(seed=self.env.config.seed)
         done = False
 

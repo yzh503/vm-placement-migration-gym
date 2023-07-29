@@ -423,10 +423,14 @@ class CaviglioneAgent(Base):
 
         self.optimizer = optim.Adam(self.dqn.parameters(), lr=config.lr)
         self.transition = list()
-        self.is_test = False
     
-    def eval(self):
-        self.is_test = True
+    def eval(self, mode=True):
+        if mode: 
+            self.dqn.eval()
+            self.dqn_target.eval()
+        else:
+            self.dqn.train()
+            self.dqn_target.train()
     
     def load_model(self, modelpath):
         self.dqn.load_state_dict(torch.load(modelpath))
@@ -452,12 +456,12 @@ class CaviglioneAgent(Base):
 
             while not done:
                 action = self._select_action(previous_obs)
-                i_vm = torch.argwhere(previous_obs.flatten()[:self.env.config.vms] == -1)
+                i_vm = torch.argwhere(previous_obs.flatten()[:self.env.config.vms] == self.env.WAIT_STATUS)
                 if i_vm.nelement() > 0:
                     i_vm = i_vm[0].item()
                 else:
                     i_vm = None
-                _, envaction = self._convert_action(previous_obs, i_vm, action)
+                _, envaction = self._convert_action(previous_obs, i_vm, action.item())
                 obs, reward, terminated, truncated, info = self.env.step(envaction.cpu().numpy())
                 obs = torch.from_numpy(obs).float().to(self.device)
                 done = terminated or truncated
