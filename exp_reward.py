@@ -11,7 +11,7 @@ import exp
 def evaluate_seeds(args):
 
     agent, weightspath, rewardfn = args
-    configfile = open('config/wr.yml')
+    configfile = open('config/1000.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -39,6 +39,7 @@ def evaluate_seeds(args):
             config['environment']['seed'] = seed
             args.append(main.Args(
                     agent=agent, 
+                    reward=config['environment']['reward_function'],
                     config=config, 
                     silent=True,
                     logdir=None,
@@ -104,9 +105,9 @@ if __name__ == '__main__':
     print("Evaluating Reward Functions...")
 
     to_print = 'Reward, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
-    to_print += evaluate_seeds(('ppo', 'weights-500/ppo-wr.pt', "kl"))
-    to_print += evaluate_seeds(('ppo', 'weights-500/ppo-ut.pt', "ut"))
-    to_print += evaluate_seeds(('ppo', 'weights-500/ppo-kl.pt', "wr"))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "kl"))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut"))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "wr"))
 
     file = open('data/exp_reward/summary.csv', 'w')
     file.write(to_print)

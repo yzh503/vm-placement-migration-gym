@@ -13,8 +13,8 @@ from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSample
 class PPOConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
-    migration_discount: float = 0.1
-    masked: bool = False
+    migration_discount: float = 0.0
+    masked: bool = True
     lr: float = 3e-5
     gamma: float = 0.99 # GAE parameter
     lamda: float = 0.98 # GAE parameter
@@ -151,7 +151,7 @@ class PPOAgent(Base):
                     mask[row, -2] = False
         else: 
             mask = None
-        obs = torch.tensor(obs, device=self.config.device).unsqueeze(0) # a batch of size 1
+        obs = torch.tensor(obs, device=self.config.device, dtype=torch.float64).unsqueeze(0) # a batch of size 1
         if self.config.det:
             action = self.model.get_det_action(obs)
         else:

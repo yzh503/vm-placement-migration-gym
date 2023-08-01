@@ -5,7 +5,7 @@ environment:
   service_length: 1000
   arrival_rate: 0.182 # 100% system load: pms / distribution expectation / service length 
   training_steps: 10000
-  eval_steps: 1000
+  eval_steps: 100000
   seed: 0
   reward_function: wr
   cap_target_util: true

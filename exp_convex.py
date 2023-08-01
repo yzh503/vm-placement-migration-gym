@@ -7,7 +7,7 @@ import copy
 import exp
 
 def evaluate(params):
-    configfile = open('config/wr.yml')
+    configfile = open('config/1000.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -27,6 +27,7 @@ def evaluate(params):
 
         args.append(main.Args(
                 agent='convex', 
+                reward=config['environment']['reward_function'],
                 config=config, 
                 silent=True,
                 logdir=None,

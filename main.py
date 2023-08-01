@@ -18,6 +18,7 @@ import os
 @dataclass
 class Args:
     agent: str
+    reward: str
     config: dict
     logdir: str
     output: str

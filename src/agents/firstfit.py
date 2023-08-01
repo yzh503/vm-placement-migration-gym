@@ -15,6 +15,9 @@ class FirstFitAgent(Base):
     def save_model(self, modelpath):
         pass
 
+    def eval(self, model=True):
+        pass
+
     def act(self, observation):
         observation = convert_obs_to_dict(self.env.config, observation)
         vm_placement = np.array(observation["vm_placement"])
