@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
-from src.vm_gym.envs.env import VmEnv
+from vm_gym.envs.env2d import VmEnv
 from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
 from src.vm_gym.envs.preprocess import PreprocessEnv

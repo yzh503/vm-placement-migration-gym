@@ -2,7 +2,7 @@ import numpy as np
 import os, torch
 from typing import Union
 
-from src.vm_gym.envs.env import EnvConfig
+from src.vm_gym.envs.config import Config
 
 def override_dict(template: dict, overrider: dict) -> dict:
     template = template.copy()
@@ -34,7 +34,7 @@ def ensure_parent_dirs_exist(file_path):
         except Exception as e: 
             print(e)
 
-def convert_obs_to_dict(config: EnvConfig, observation: Union[torch.Tensor, np.ndarray]) -> dict:
+def convert_obs_to_dict(config: Config, observation: Union[torch.Tensor, np.ndarray]) -> dict:
     if isinstance(observation, torch.Tensor):
         vm_placement = observation[:config.vms].to(int)
     else: 

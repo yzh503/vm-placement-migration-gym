@@ -1,11 +1,16 @@
 from gymnasium.envs.registration import register
 
 register(
-    id="MultiDiscreteVmEnv-v1",
-    entry_point="src.vm_gym.envs.mdenv:MultiDiscreteVmEnv"
+    id="VmEnv-1d",
+    entry_point="src.vm_gym.envs.env1d:VmEnv"
 )
 
 register(
-    id="VmEnv-v1",
-    entry_point="src.vm_gym.envs.env:VmEnv"
+    id="VmEnv-1d2",
+    entry_point="src.vm_gym.envs.env1d2:VmEnv"
+)
+
+register(
+    id="VmEnv-2d",
+    entry_point="src.vm_gym.envs.env2d:VmEnv"
 )

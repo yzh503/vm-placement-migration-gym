@@ -13,7 +13,7 @@ from tqdm import tqdm
 from collections import namedtuple, deque
 
 from src.agents.base import Base
-from src.vm_gym.envs.env import VmEnv
+from vm_gym.envs.env2d import VmEnv
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 

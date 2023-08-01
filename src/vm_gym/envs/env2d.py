@@ -4,20 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 
-@dataclass
-class EnvConfig(object):
-    arrival_rate: float = 0.182 # 100% system load: pms / distribution expectation / service length 
-    service_length: float = 100
-    pms: int = 10
-    vms: int = 30   
-    var: float = 0.01 # std deviation of normal in KL divergence 
-    training_steps: int = 500
-    eval_steps: int = 100000
-    seed: int = 0
-    reward_function: str = "wr"
-    sequence: str = "uniform"
-    cap_target_util: bool = True
-    beta: int = 0.5
+from src.vm_gym.envs.config import Config
 
 def kl_divergence(p_mean, p_cov, q_mean, q_cov):
     p_dim = p_mean.shape[0]
@@ -34,7 +21,7 @@ class VmEnv(gym.Env):
 
     metadata = {'render_modes': ['ansi']}
 
-    def __init__(self, config: EnvConfig):
+    def __init__(self, config: Config):
         self.config = config
         self.eval_mode = False
         self.observation_space = spaces.Box(low=-1, high=self.config.pms+1, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
@@ -91,8 +78,6 @@ class VmEnv(gym.Env):
                     self.suspend_action += 1
                 elif move_to_pm < self.WAIT_STATUS: # Allocate
                     self._place_vm(move_to_pm, vm)
-                    if self.vm_suspended[vm] == 0:
-                        self.served_requests += 1
                     self.vm_suspended[vm] = 0
                     self.place_action += 1
                 else: 
@@ -132,7 +117,6 @@ class VmEnv(gym.Env):
         vms_arrived = np.count_nonzero(self.vm_placement <= self.config.pms)
         vms_waiting = np.count_nonzero(self.vm_placement == self.config.pms)
         self.waiting_ratio = vms_waiting / vms_arrived if vms_arrived > 0 else 0
-        self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms 
         self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
         if self.config.cap_target_util and self.target_cpu_mean > 1: 
             self.target_cpu_mean = 1.0
@@ -210,8 +194,7 @@ class VmEnv(gym.Env):
         self.cpu = np.zeros(self.config.pms)
         self.memory = np.zeros(self.config.pms)
         self.vm_remaining_runtime = np.zeros(self.config.vms, dtype=int)
-        self.waiting_ratio = np.zeros(self.config.vms)
-        self.used_cpu_ratio = np.zeros(self.config.vms)
+        self.waiting_ratio = 0
         self.target_cpu_mean = 0
         self.target_memory_mean = 0
         # Not in observation
@@ -229,13 +212,7 @@ class VmEnv(gym.Env):
         self.total_memory_requested = 0
 
         max_steps = max(self.config.training_steps, self.config.eval_steps)
-        if self.config.sequence == 'ffworst':
-            self.vm_cpu_sequence = np.tile(np.concatenate((np.repeat(0.15, 6 * self.config.eval_steps // 100), np.repeat(0.34, 8 * self.config.eval_steps // 100), np.repeat(0.51, 6 * self.config.eval_steps // 100))), max_steps // 10).tolist()
-            self.vm_memory_sequence = np.tile(np.concatenate((np.repeat(0.15, 6 * self.config.eval_steps // 100), np.repeat(0.34, 8 * self.config.eval_steps // 100), np.repeat(0.51, 6 * self.config.eval_steps // 100))), max_steps // 10).tolist()
-        elif self.config.sequence == 'multinomial':
-            self.vm_cpu_sequence = self.rng1.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps*2, replace=True) # uniform discrete
-            self.vm_memory_sequence = self.rng2.choice([0.125,0.25,0.375,0.5,0.675,0.75,0.875], p=[0.148,0.142,0.142,0.142,0.142,0.142,0.142], size=max_steps*2, replace=True) # uniform discrete
-        elif self.config.sequence == 'uniform':
+        if self.config.sequence == 'uniform':
             self.vm_cpu_sequence = np.around(self.rng1.uniform(low=0.1, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.55
             self.vm_memory_sequence = np.around(self.rng2.uniform(low=0.1, high=1, size=max_steps*2), decimals=2).tolist() # mean 0.55
         elif self.config.sequence == 'lowuniform':
@@ -288,6 +265,8 @@ class VmEnv(gym.Env):
             self.vm_remaining_runtime[vm_to_terminate] = 0
             self.vm_suspended[vm_to_terminate] = 0
 
+            self.served_requests += vm_to_terminate.size
+
         self.cpu[self.cpu < 1e-7] = 0 # precision problem 
         self.memory[self.memory < 1e-7] = 0 # precision problem
 
@@ -322,7 +301,6 @@ class VmEnv(gym.Env):
     def _get_info(self):
         return {
             "waiting_ratio": self.waiting_ratio, 
-            "used_cpu_ratio": self.used_cpu_ratio,
             "served_requests": self.served_requests,
             'suspend_actions': self.suspend_action,
             'place_actions': self.place_action,

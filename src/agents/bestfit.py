@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import numpy as np
 from src.agents.base import Base
 from src.utils import convert_obs_to_dict

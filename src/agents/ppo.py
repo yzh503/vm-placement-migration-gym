@@ -3,24 +3,26 @@ import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
 import math
-from src.vm_gym.envs.env import VmEnv
+from src.vm_gym.envs.env2d import VmEnv
 from torch.distributions.categorical import Categorical
 from src.agents.base import Base, Config
 from dataclasses import dataclass
 import gymnasium
 from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSampler
+from torch.optim import lr_scheduler
+
 @dataclass
 class PPOConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
-    migration_ratio: float = 0.0
+    migration_ratio: float = 0.001
     masked: bool = True
     lr: float = 3e-5
     gamma: float = 0.99 # GAE parameter
     lamda: float = 0.98 # GAE parameter
     ent_coef: float = 0.01 # Entropy coefficient
     vf_coef: float = 0.5 # Value function coefficient
-    vf_loss_clip: bool = True
+    vf_loss_clip: bool = False
     k_epochs: int = 4
     kl_max: float = 0.02
     eps_clip: float = 0.1
@@ -184,12 +186,13 @@ class PPOAgent(Base):
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
 
+        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: 0.9995)
+
         for i_episode in pbar1:
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
             obs = torch.tensor(obs, device=self.config.device, dtype=torch.float64)
             done = False
-            pbar2 = tqdm(total=int(self.env.config.training_steps), disable=not bool(self.config.training_progress_bar), desc='Episode', leave=False)
             while not done:
                 mask = torch.tensor(self.env.get_action_mask(), device=self.config.device) if self.config.masked else None
                 
@@ -211,12 +214,12 @@ class PPOAgent(Base):
 
                 if i_batch >= self.config.batch_size:
                     self.update(mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
+                    scheduler.step()
                     i_batch = 0
                 
                 obs = next_obs
                 self.total_steps += 1
                 current_ep_reward += reward  # For logging
-                pbar2.update()
 
             ep_returns[i_episode] = current_ep_reward
             if self.writer: 

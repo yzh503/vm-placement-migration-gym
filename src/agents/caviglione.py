@@ -15,7 +15,7 @@ from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 from src.segment_tree import MinSegmentTree, SumSegmentTree
 from src.agents.base import Base, Config
-from src.vm_gym.envs.env import VmEnv
+from src.vm_gym.envs.env2d import VmEnv
 from src.utils import convert_obs_to_dict
 
 class ReplayBuffer:
