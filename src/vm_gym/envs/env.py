@@ -50,7 +50,7 @@ class VmEnv(gym.Env):
             return True
         if current_pm == self.WAIT_STATUS: # VM is waiting
             return move_to_pm < self.WAIT_STATUS and self._resource_valid(vm, move_to_pm)
-        if current_pm < self.WAIT_STATUS: # VM is on a PM
+        if current_pm < self.WAIT_STATUS: # VM is running 
             return move_to_pm == self.WAIT_STATUS
         return False
 
@@ -132,7 +132,13 @@ class VmEnv(gym.Env):
         vms_arrived = np.count_nonzero(self.vm_placement <= self.config.pms)
         vms_waiting = np.count_nonzero(self.vm_placement == self.config.pms)
         self.waiting_ratio = vms_waiting / vms_arrived if vms_arrived > 0 else 0
-        self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms
+        self.used_cpu_ratio = np.count_nonzero(self.cpu > 0) / self.config.pms 
+        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+        if self.config.cap_target_util and self.target_cpu_mean > 1: 
+            self.target_cpu_mean = 1.0
+        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+        if self.config.cap_target_util and self.target_memory_mean > 1: 
+            self.target_memory_mean = 1.0
         
         if not (self.vm_placement < self.NULL_STATUS).any(): # No VMs running
             reward = 0.0
@@ -148,12 +154,7 @@ class VmEnv(gym.Env):
                 memory_vars = 1e-6
             current_cov = np.array([[cpu_vars, 0], [0, memory_vars]])
 
-            self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
-            if self.config.cap_target_util and self.target_cpu_mean > 1: 
-                self.target_cpu_mean = 1.0
-            self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
-            if self.config.cap_target_util and self.target_memory_mean > 1: 
-                self.target_memory_mean = 1.0
+            
             target_mean = np.array([self.target_cpu_mean, self.target_memory_mean])
             target_cpu_var = np.var(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) 
             target_memory_var = np.var(self.vm_memory[self.vm_placement < self.NULL_STATUS])
@@ -171,8 +172,6 @@ class VmEnv(gym.Env):
             reward = self.config.beta * np.sum(self.cpu) + (1 - self.config.beta) * np.sum(self.memory)
         elif self.config.reward_function == "wr":
             reward = - self.waiting_ratio 
-        elif self.config.reward_function == "ws":
-            reward = - np.count_nonzero(self.vm_placement == self.WAIT_STATUS)
         else: 
             assert False, f'Function does not exist: {self.config.reward_function}'
 
@@ -223,7 +222,6 @@ class VmEnv(gym.Env):
         self.place_action = 0
         self.dropped_requests = 0
         self.vm_planned_runtime = np.zeros(self.config.vms, dtype=int)
-        self.vm_waiting_time = np.zeros(self.config.vms, dtype=int)
         self.vm_suspended = np.zeros(self.config.vms, dtype=int)
         self.vm_arrival_steps = [[] for _ in range(self.config.vms)] # Make sure the inner arrays are not references to the same array
         self.target_mean = []
@@ -264,7 +262,6 @@ class VmEnv(gym.Env):
         print(f"Memory (%): \t\t{np.array(self.memory*100, dtype=int)} {np.round(np.sum(self.memory), 3)}")
         print(f"VM CPU (%): \t\t{np.array(self.vm_cpu*100, dtype=int)} {np.round(np.sum(self.vm_cpu), 3)}")
         print(f"VM Memory (%): \t\t{np.array(self.vm_memory*100, dtype=int)} {np.round(np.sum(self.vm_memory), 3)}")
-        print(f"VM waiting time: \t{self.vm_waiting_time}")
         print(f"VM planned runtime: \t{self.vm_planned_runtime}")
         print(f"VM remaining runtime: \t{self.vm_remaining_runtime}")
 
@@ -274,11 +271,6 @@ class VmEnv(gym.Env):
     def _run_vms(self):
         condition = np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement < self.WAIT_STATUS)
         self.vm_remaining_runtime[condition] -= 1
-        if np.any(condition):
-            self.vm_waiting_time[condition] += 1
-
-        self.vm_waiting_time[self.vm_placement == self.WAIT_STATUS] += 1
-
         condition_terminate = np.logical_and(self.vm_remaining_runtime == 0, self.vm_placement < self.WAIT_STATUS)
         vm_to_terminate = np.flatnonzero(condition_terminate)
 
@@ -293,7 +285,6 @@ class VmEnv(gym.Env):
             self.vm_cpu[vm_to_terminate] = 0
             self.vm_memory[vm_to_terminate] = 0
             self.vm_planned_runtime[vm_to_terminate] = 0
-            self.vm_waiting_time[vm_to_terminate] = 0
             self.vm_remaining_runtime[vm_to_terminate] = 0
             self.vm_suspended[vm_to_terminate] = 0
 

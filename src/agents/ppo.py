@@ -13,7 +13,7 @@ from torch.utils.data import BatchSampler, SubsetRandomSampler, SequentialSample
 class PPOConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
-    migration_discount: float = 0.0
+    migration_ratio: float = 0.0
     masked: bool = True
     lr: float = 3e-5
     gamma: float = 0.99 # GAE parameter
@@ -147,7 +147,7 @@ class PPOAgent(Base):
         if self.config.masked:
             mask = torch.tensor(self.env.get_action_mask(), dtype=bool, device=self.config.device)
             for row in range(self.env.config.vms):
-                if mask[row, -2] and np.random.rand() > self.config.migration_discount:
+                if mask[row, -2] and np.random.rand() > self.config.migration_ratio:
                     mask[row, -2] = False
         else: 
             mask = None

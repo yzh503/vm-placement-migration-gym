@@ -9,7 +9,7 @@ import exp
 import time 
 
 def evaluate(args):
-    agent, weightspath, rewardfn, migration_discount = args
+    agent, weightspath, rewardfn, migration_ratio = args
     configfile = open('config/1000.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
@@ -18,11 +18,11 @@ def evaluate(args):
     config['environment']['reward_function'] = rewardfn
     config['environment']['service_length'] = exp.service_length
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
-    config['agents']['ppo']['migration_discount'] = migration_discount
+    config['agents']['ppo']['migration_ratio'] = migration_ratio
 
     args = []
 
-    recordname = 'data/exp_migration_discount/%s-%.3f.json' % (agent, migration_discount)
+    recordname = 'data/exp_migration_ratio/%s-%.3f.json' % (agent, migration_ratio)
     
     if exists(recordname):
         print(f"{recordname} exists")
@@ -46,7 +46,7 @@ def evaluate(args):
         record.save(recordname)
 
     to_print = '%s,' % (agent) 
-    to_print += '%.3f,' % (migration_discount) 
+    to_print += '%.3f,' % (migration_ratio) 
     to_print += '%d,' % (record.served_requests[-1]) 
     to_print += '%.3f,' % (np.mean(record.pending_rates))
     to_print += '%.3f,' % (np.mean(record.slowdown_rates))
@@ -63,21 +63,21 @@ if __name__ == '__main__':
     to_print = 'Agent, Migration Discount, Total Served, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
-    for migration_discount in np.arange(0.0, 0.011, 0.001):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_discount))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_discount))
-        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
+    for migration_ratio in np.arange(0.0, 0.011, 0.001):
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
 
-    for migration_discount in np.arange(0.0, 0.05, 0.01):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_discount))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_discount))
-        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
+    for migration_ratio in np.arange(0.0, 0.05, 0.01):
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
 
 
-    for migration_discount in np.arange(0.0, 1.05, 0.05):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_discount))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'utilisation', migration_discount))
-        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_discount))
+    for migration_ratio in np.arange(0.0, 1.05, 0.05):
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'utilisation', migration_ratio))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
 
 
 
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     for res in results:
         to_print += res
 
-    file = open('data/exp_migration_discount/data.csv', 'w')
+    file = open('data/exp_migration_ratio/data.csv', 'w')
     file.write(to_print)
     file.close()
 
