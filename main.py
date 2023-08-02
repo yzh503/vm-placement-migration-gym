@@ -4,7 +4,7 @@ from src.agents.caviglione import CaviglioneAgent, CaviglioneConfig
 from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent
 from src.agents.convex import ConvexAgent, ConvexConfig
-from src.vm_gym.envs.env import EnvConfig
+from src.vm_gym.envs.config import Config
 from src.record import Record
 import gymnasium as gym
 import yaml, argparse
@@ -45,7 +45,7 @@ def run(args: Args) -> Record:
         torch.cuda.manual_seed_all(env_config['seed'])
     torch.set_float32_matmul_precision('high')
 
-    env = gym.make("VmEnv-v1", config=EnvConfig(**env_config))
+    env = gym.make("VmEnv", config=Config(**env_config))
 
     if args.agent == "caviglione":
         agent = CaviglioneAgent(env, CaviglioneConfig(**agent_config))
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convex", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/kl.yml', help = "Configuration for environment and agent")
-    parser.add_argument("-r", "--reward", default='wr', choices=["wr", "ut", "kl"], help = "wr: waiting ratio, ut: utilization, kl: kl divergence")
+    parser.add_argument("-r", "--reward", default='wr', choices=["wr", "ut", "kl", "sr"], help = "wr: waiting ratio, ut: utilization, kl: kl divergence")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")
     parser.add_argument("-l", "--logdir", help="Directory of tensorboard logs")
     parser.add_argument("-j", "--jobname", help="Job name in tensorboard")

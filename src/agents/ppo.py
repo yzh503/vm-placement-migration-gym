@@ -237,7 +237,7 @@ class PPOAgent(Base):
             advantages = torch.zeros_like(rewards_batch)
             values_batch = torch.flatten(self.model.get_value(obs_batch))
             next_values = torch.flatten(self.model.get_value(next_obs_batch))
-            deltas = rewards_batch + (1 - done_batch) * self.config.gamma * next_values - values_batch
+            deltas = rewards_batch + (1 - done_batch) * self.config.gamma * next_values - values_batch # how much future reawards are taken in to account
             for i in reversed(range(len(deltas))):
                 gae = deltas[i] + (1 - done_batch[i]) * self.config.gamma * self.config.lamda * gae 
                 advantages[i] = gae

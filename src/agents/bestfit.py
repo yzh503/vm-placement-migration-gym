@@ -37,5 +37,5 @@ class BestFitAgent(Base):
                         cpu[best_pm] += vm_cpu[v]
                         memory[best_pm] += vm_memory[v]
                         break
-
-        return action
+        
+        return action + 1
