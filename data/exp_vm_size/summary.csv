@@ -1,7 +1,0 @@
-Model, Seq, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Waiting Ratio
-ppomd,lowuniform,-133646.5099,0.1842,32689,27942,0.8174,0.9715,0.0265,0.1900
-firstfitmd,lowuniform,-126683.2162,0.1534,33918,0,0.8481,0.9651,0.0200,0.1439
-bestfitmd,lowuniform,-114670.6860,0.1466,34213,0,0.8553,0.9605,0.0229,0.1320
-ppomd,highuniform,-176200.9054,0.1848,19503,3838,0.8127,0.9995,0.0244,0.5159
-firstfitmd,highuniform,-183760.5665,0.1915,19314,0,0.8047,0.9996,0.0240,0.5247
-bestfitmd,highuniform,-167359.9693,0.1865,19431,0,0.8096,0.9996,0.0261,0.5206

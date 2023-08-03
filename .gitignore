@@ -131,3 +131,4 @@ dmypy.json
 *.json
 tensorboard
 data/exp_performance/data.csv
+weights-test/*

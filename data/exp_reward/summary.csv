@@ -1,4 +1,0 @@
-Agent, Reward, Load, Serv Rate, PM, Return, Drop Rate, Served VM, Suspend Actions, Util, Util Target, Util Var, Pending Rate, Waiting Ratio, Slowdown Rate
-ppomd,1,1.00,1000,10,-159401.393,0.110,2326,2058,0.851,0.992,0.016,0.236,0.380,0.019
-ppomd,2,1.00,1000,10,127875.499,0.111,2322,2319,0.850,0.993,0.016,0.236,0.381,0.020
-ppomd,3,1.00,1000,10,-57025.731,0.111,2323,2186,0.851,0.992,0.016,0.235,0.380,0.019
