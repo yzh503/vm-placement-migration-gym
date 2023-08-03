@@ -123,7 +123,7 @@ class VmEnv(gym.Env):
         if self.config.cap_target_util and self.target_memory_mean > 1: 
             self.target_memory_mean = 1.0
         
-        if not (self.vm_placement < self.NULL_STATUS).any(): # No VMs running
+        if not vms_existing.any(): # No VMs running
             reward = 0.0
         elif self.config.reward_function == "kl": # KL divergence between from approximator to true
             current_cpu = np.mean(self.cpu)
