@@ -4,12 +4,11 @@ from src.agents.caviglione import CaviglioneAgent, CaviglioneConfig
 from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent
 from src.agents.convex import ConvexAgent, ConvexConfig
-from src.vm_gym.envs.env import EnvConfig
+from vmenv.envs.env import Config
 from src.record import Record
 import gymnasium as gym
 import yaml, argparse
 import numpy as np 
-import src.vm_gym
 import src.utils
 import random
 import torch
@@ -45,7 +44,7 @@ def run(args: Args) -> Record:
         torch.cuda.manual_seed_all(env_config['seed'])
     torch.set_float32_matmul_precision('high')
 
-    env = gym.make("VmEnv-v1", config=EnvConfig(**env_config))
+    env = gym.make("VmEnv-v1", config=Config(**env_config))
 
     if args.agent == "caviglione":
         agent = CaviglioneAgent(env, CaviglioneConfig(**agent_config))

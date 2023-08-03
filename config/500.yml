@@ -15,10 +15,7 @@ agents:
   ppo: 
       episodes: 400
       hidden_size: 512
-      batch_size: 100
-      minibatch_size: 25
       migration_ratio: 1
-      device: cpu 
   caviglione: 
       episodes: 400
       hidden_size: 512

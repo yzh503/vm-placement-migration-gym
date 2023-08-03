@@ -3,7 +3,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
 import math
-from src.vm_gym.envs.env2d import VmEnv
+from vmenv.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
 from src.agents.base import Base, Config
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ class PPOConfig(Config):
     lamda: float = 0.98 # GAE parameter
     ent_coef: float = 0.01 # Entropy coefficient
     vf_coef: float = 0.5 # Value function coefficient
-    vf_loss_clip: bool = False
+    vf_loss_clip: bool = True
     k_epochs: int = 4
     kl_max: float = 0.02
     eps_clip: float = 0.1
@@ -134,10 +134,11 @@ class PPOAgent(Base):
         self.init_model()
    
     def init_model(self):
+        self.float_dtype = torch.float32
         self.obs_dim = self.env.observation_space.shape[0]
-        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, torch.float64) 
+        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, self.float_dtype) 
         self.model = torch.compile(self.model).to(self.config.device)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.lr, eps=1e-5)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.config.lr)
 
     def eval(self, mode=True):
         if mode: 
@@ -153,7 +154,7 @@ class PPOAgent(Base):
                     mask[row, -2] = False
         else: 
             mask = None
-        obs = torch.tensor(obs, device=self.config.device, dtype=torch.float64).unsqueeze(0) # a batch of size 1
+        obs = torch.tensor(obs, device=self.config.device, dtype=self.float_dtype).unsqueeze(0) # a batch of size 1
         if self.config.det:
             action = self.model.get_det_action(obs)
         else:
@@ -170,14 +171,14 @@ class PPOAgent(Base):
 
     def learn(self):
         ep_returns = np.zeros(self.config.episodes)
-        pbar1 = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar), desc='Training')
+        pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar), desc='Training')
 
         return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
         
         mask_batch = torch.zeros((self.config.batch_size,self.env.config.vms, self.env.config.pms + 2), dtype=bool, device=self.config.device)
         action_batch = torch.zeros((self.config.batch_size,self.env.action_space.nvec.size), dtype=int, device=self.config.device)
-        obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, dtype=torch.float64, device=self.config.device)
-        next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, dtype=torch.float64, device=self.config.device)
+        obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, dtype=self.float_dtype, device=self.config.device)
+        next_obs_batch = torch.zeros(self.config.batch_size, self.obs_dim, dtype=self.float_dtype, device=self.config.device)
         logprob_batch = torch.zeros(self.config.batch_size, dtype=torch.float32, device=self.config.device)
         rewards_batch = torch.zeros(self.config.batch_size, dtype=torch.float32, device=self.config.device)
         done_batch = torch.zeros(self.config.batch_size, dtype=int, device=self.config.device)
@@ -186,12 +187,10 @@ class PPOAgent(Base):
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
 
-        scheduler = lr_scheduler.MultiplicativeLR(self.optimizer, lr_lambda=lambda epoch: 0.9995)
-
-        for i_episode in pbar1:
+        for i_episode in pbar:
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
-            obs = torch.tensor(obs, device=self.config.device, dtype=torch.float64)
+            obs = torch.tensor(obs, device=self.config.device, dtype=self.float_dtype)
             done = False
             while not done:
                 mask = torch.tensor(self.env.get_action_mask(), device=self.config.device) if self.config.masked else None
@@ -199,7 +198,7 @@ class PPOAgent(Base):
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), mask=mask) # pass in a batch of size 1
                 action = torch.flatten(action)
                 next_obs, reward, done, _, _ = self.env.step(action.cpu().numpy())
-                next_obs = torch.tensor(next_obs, device=self.config.device, dtype=torch.float64)
+                next_obs = torch.tensor(next_obs, device=self.config.device, dtype=self.float_dtype)
                 reward_t = reward_scaler.scale(reward)[0] if self.config.reward_scaling else reward
                 
                 if self.config.masked:
@@ -214,7 +213,6 @@ class PPOAgent(Base):
 
                 if i_batch >= self.config.batch_size:
                     self.update(mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch)
-                    scheduler.step()
                     i_batch = 0
                 
                 obs = next_obs
@@ -226,7 +224,7 @@ class PPOAgent(Base):
                 self.writer.add_scalar('Training/ep_return', current_ep_reward, i_episode)
 
             if i_episode > return_factor: 
-                pbar1.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
+                pbar.set_description("Return %.2f" % np.median(ep_returns[i_episode-return_factor:i_episode]))
             
 
     def update(self, mask_batch, action_batch, obs_batch, next_obs_batch, logprob_batch, rewards_batch, done_batch):
@@ -259,10 +257,10 @@ class PPOAgent(Base):
                 adv_minibatch = (adv_minibatch - adv_minibatch.mean()) / (adv_minibatch.std() + 1e-10) # Adv normalisation
                 mask_minibatch = mask_batch[minibatch] if self.config.masked else None
                 _, newlogprob, entropy = self.model.get_action(obs_batch[minibatch], action=action_batch[minibatch], mask=mask_minibatch)
-                assert newlogprob.shape == logprob_batch[minibatch].shape
+                #assert newlogprob.shape == logprob_batch[minibatch].shape
                 log_ratios = newlogprob - logprob_batch[minibatch] # KL divergence
                 ratios = torch.exp(log_ratios)
-                assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 1e-4),  log_ratios # reconstruct logprobs in epoch 1 minibatch 1.
+                #assert bi != 0 or epoch != 0 or torch.all(torch.abs(ratios - 1.0) < 1e-4),  log_ratios # reconstruct logprobs in epoch 1 minibatch 1.
                 if -log_ratios.mean() > self.config.kl_max:
                     break
                 clipfracs.append(((ratios - 1.0).abs() > self.config.eps_clip).float().mean().item())

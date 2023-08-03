@@ -3,7 +3,7 @@ import numpy as np
 from src.agents.base import Base, Config
 from src.utils import convert_obs_to_dict
 import cvxpy as cvx
-from src.vm_gym.envs.env2d import VmEnv
+from vmenv.envs.env import VmEnv
 
 @dataclass
 class ConvexConfig(Config): 

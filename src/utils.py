@@ -2,7 +2,7 @@ import numpy as np
 import os, torch
 from typing import Union
 
-from src.vm_gym.envs.config import Config
+from vmenv.envs.config import Config
 
 def override_dict(template: dict, overrider: dict) -> dict:
     template = template.copy()

@@ -6,7 +6,7 @@ from time import gmtime, strftime
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from src.vm_gym.envs.env2d import VmEnv
+from vmenv.envs.env import VmEnv
 
 @dataclass
 class Config: 

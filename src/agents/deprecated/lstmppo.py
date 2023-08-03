@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
-from vm_gym.envs.env2d import VmEnv
+from vmenv.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
-from src.vm_gym.envs.preprocess import PreprocessEnv
+from vmenv.envs.preprocess import PreprocessEnv
 from torch.optim import lr_scheduler
 from src.agents.base import Base
 from dataclasses import dataclass

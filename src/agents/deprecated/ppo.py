@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
-from vm_gym.envs.env2d import VmEnv
+from vmenv.envs.env import VmEnv
 from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
 from torch.optim import lr_scheduler

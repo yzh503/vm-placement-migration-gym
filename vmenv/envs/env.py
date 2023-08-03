@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from typing import Optional, Tuple
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 
-from src.vm_gym.envs.config import Config
+from vmenv.envs.config import Config
 
 def kl_divergence(p_mean, p_cov, q_mean, q_cov):
     p_dim = p_mean.shape[0]
@@ -24,7 +23,7 @@ class VmEnv(gym.Env):
     def __init__(self, config: Config):
         self.config = config
         self.eval_mode = False
-        self.observation_space = spaces.Box(low=-1, high=self.config.pms+1, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
+        self.observation_space = spaces.Box(low=0, high=self.config.pms + 1, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
         self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.config.pms + 2))  # Every VM has (PMs or wait action or null action) actions
         self.WAIT_STATUS = self.config.pms
         self.NULL_STATUS = self.config.pms + 1
@@ -113,14 +112,14 @@ class VmEnv(gym.Env):
         # Action is predicted against the observation, so update arrival and terminatino after the action.
         self._run_vms()
         self._accept_vm_requests() 
-        
-        vms_arrived = np.count_nonzero(self.vm_placement <= self.config.pms)
-        vms_waiting = np.count_nonzero(self.vm_placement == self.config.pms)
+        vms_existing = self.vm_placement <= self.WAIT_STATUS
+        vms_arrived = np.count_nonzero(vms_existing)
+        vms_waiting = np.count_nonzero(self.vm_placement == self.WAIT_STATUS)
         self.waiting_ratio = vms_waiting / vms_arrived if vms_arrived > 0 else 0
-        self.target_cpu_mean = np.sum(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+        self.target_cpu_mean = np.sum(self.vm_cpu[vms_existing]) / self.config.pms
         if self.config.cap_target_util and self.target_cpu_mean > 1: 
             self.target_cpu_mean = 1.0
-        self.target_memory_mean = np.sum(self.vm_memory[self.vm_placement < self.NULL_STATUS]) / self.config.pms
+        self.target_memory_mean = np.sum(self.vm_memory[vms_existing]) / self.config.pms
         if self.config.cap_target_util and self.target_memory_mean > 1: 
             self.target_memory_mean = 1.0
         
@@ -140,8 +139,8 @@ class VmEnv(gym.Env):
 
             
             target_mean = np.array([self.target_cpu_mean, self.target_memory_mean])
-            target_cpu_var = np.var(self.vm_cpu[self.vm_placement < self.NULL_STATUS]) 
-            target_memory_var = np.var(self.vm_memory[self.vm_placement < self.NULL_STATUS])
+            target_cpu_var = np.var(self.vm_cpu[vms_existing]) 
+            target_memory_var = np.var(self.vm_memory[vms_existing])
             if target_cpu_var == 0:
                 target_cpu_var = 1e-6
             if target_memory_var == 0:
@@ -246,10 +245,11 @@ class VmEnv(gym.Env):
         pass
 
     def _run_vms(self):
-        condition = np.logical_and(self.vm_remaining_runtime > 0, self.vm_placement < self.WAIT_STATUS)
-        self.vm_remaining_runtime[condition] -= 1
-        condition_terminate = np.logical_and(self.vm_remaining_runtime == 0, self.vm_placement < self.WAIT_STATUS)
-        vm_to_terminate = np.flatnonzero(condition_terminate)
+        running = self.vm_placement < self.WAIT_STATUS
+        continue_to_run = np.logical_and(self.vm_remaining_runtime > 0, running)
+        self.vm_remaining_runtime[continue_to_run] -= 1
+        to_terminate = np.logical_and(self.vm_remaining_runtime == 0, running)
+        vm_to_terminate = np.flatnonzero(to_terminate)
 
         if vm_to_terminate.size > 0:
             pms_to_free_up = self.vm_placement[vm_to_terminate]

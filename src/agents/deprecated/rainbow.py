@@ -15,7 +15,7 @@ from tqdm import tqdm
 from src.utils import convert_obs_to_dict
 from src.segment_tree import MinSegmentTree, SumSegmentTree
 from src.agents.base import Base
-from vm_gym.envs.env2d import VmEnv
+from vmenv.envs.env import VmEnv
 
 class ReplayBuffer:
     def __init__(

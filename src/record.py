@@ -8,6 +8,7 @@ class Record:
         self.agent = agent
         self.env_config = env_config if isinstance(env_config, dict) else vars(env_config)
         self.agent_config = agent_config if isinstance(agent_config, dict) else None
+        self.WAIT_STATUS = self.env_config['pms']
 
         # Below records the info for each step in testing.
         self.cpu = list[float]()
@@ -43,27 +44,19 @@ class Record:
             for end in self.vm_arrival_steps[vm][1:]:
                 end -= 2 # Note that vm_placements starts from timestep 2
                 spline = vm_status[start:end]
-                unique_vms_placement.append(spline[spline <= self.env_config['pms']])
+                unique_vms_placement.append(spline[spline <= self.WAIT_STATUS])
                 start = end
             spline = vm_status[start:]
-            assert spline[spline <= self.env_config['pms']].size != 0, spline[spline <= self.env_config['pms']]
-            unique_vms_placement.append(spline[spline <= self.env_config['pms']])
+            assert spline[spline <= self.WAIT_STATUS].size != 0, spline[spline <= self.WAIT_STATUS]
+            unique_vms_placement.append(spline[spline <= self.WAIT_STATUS])
         return unique_vms_placement 
-
-    @property
-    def total_running(self):
-        total = 0
-        for vm in self.unique_vms_placement:
-            vm = np.array(vm)
-            total += np.count_nonzero(vm < self.env_config['pms'])
-        return total
 
     @property
     def pending_rates(self):
         flat_pending_rates = []
         for status in self.unique_vms_placement:
             status = np.array(status)
-            running_status = np.where(status < self.env_config['pms'])[0]
+            running_status = np.where(status < self.WAIT_STATUS)[0]
             allocated_at = running_status[0] if running_status.size > 0 else None
             if allocated_at: 
                 rate = np.around((allocated_at + 1.0) / len(status) , 3)
@@ -77,10 +70,10 @@ class Record:
         flat_slowdown_rates = []
         for status in self.unique_vms_placement:
             status = np.array(status)
-            running_status = np.where(status < self.env_config['pms'])[0]
+            running_status = np.where(status < self.WAIT_STATUS)[0]
             allocated_at = running_status[0] if running_status.size > 0 else None
             if allocated_at:
-                slowdown_steps = np.count_nonzero(status[allocated_at:] == self.env_config['pms'])
+                slowdown_steps = np.count_nonzero(status[allocated_at:] == self.WAIT_STATUS)
                 vm_life = len(status) - allocated_at - 1
                 rate = 0 if vm_life == 0 else np.around(slowdown_steps / vm_life, 3)
                 flat_slowdown_rates.append(rate)
@@ -94,7 +87,7 @@ class Record:
         life = []
         for status in self.unique_vms_placement:
             status = np.array(status)
-            running_status = np.where(status < self.env_config['pms'])[0]
+            running_status = np.where(status < self.WAIT_STATUS)[0]
             allocated_at = running_status[0] if running_status.size > 0 else None
             if allocated_at:
                 life.append(len(status) - allocated_at - 1)

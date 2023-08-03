@@ -17,8 +17,8 @@ from tqdm import tqdm
 from src.segment_tree import MinSegmentTree, SumSegmentTree
 
 from src.agents.base import Base
-from vm_gym.envs.env2d import VmEnv
-from src.vm_gym.envs.preprocess import PreprocessEnv
+from vmenv.envs.env import VmEnv
+from vmenv.envs.preprocess import PreprocessEnv
 
 class ReplayBuffer:
     def __init__(
