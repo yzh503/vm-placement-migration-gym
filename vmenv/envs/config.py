@@ -14,3 +14,5 @@ class Config(object):
     sequence: str = "uniform"
     cap_target_util: bool = True
     beta: int = 0.5
+    allow_null_action: bool = False
+    resources: int = 2

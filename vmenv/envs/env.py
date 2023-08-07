@@ -23,8 +23,12 @@ class VmEnv(gym.Env):
     def __init__(self, config: Config):
         self.config = config
         self.eval_mode = False
-        self.observation_space = spaces.Box(low=0, high=self.config.pms + 1, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
-        self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.config.pms + 2))  # Every VM has (PMs or wait action or null action) actions
+        self.action_dim = self.config.pms + 2 if self.config.allow_null_action else self.config.pms + 1
+        if self.config.resources == 1:
+            self.observation_space = spaces.Box(low=0, high=self.config.pms + 2, shape=(self.config.vms * 2 + self.config.pms,))
+        else:
+            self.observation_space = spaces.Box(low=0, high=self.config.pms + 2, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
+        self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.action_dim))  # Every VM has (PMs or wait action or null action) actions
         self.WAIT_STATUS = self.config.pms
         self.NULL_STATUS = self.config.pms + 1
         self.reset(self.config.seed)
@@ -41,15 +45,23 @@ class VmEnv(gym.Env):
         return False
 
     # invalid is true
-    def get_action_mask(self) -> np.ndarray:
-        mask = np.zeros([self.config.vms , self.config.pms + 2], dtype=bool)
-        for vm, current_pm in enumerate(self.vm_placement):
-            for move_to_pm in range(self.config.pms + 2):
-                mask[vm, move_to_pm] = self.validate(vm, current_pm, move_to_pm)
-        return mask
-
+    def get_invalid_action_mask(self, masked: bool = True) -> np.ndarray:
+        mask = np.zeros([self.config.vms , self.action_dim], dtype=bool)
+        if masked:
+            for vm, current_pm in enumerate(self.vm_placement):
+                for move_to_pm in range(self.action_dim):
+                    mask[vm, move_to_pm] = not self.validate(vm, current_pm, move_to_pm)
+            return mask
+        else: 
+            return mask
+        
     def _resource_valid(self, vm, pm):
-        return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
+        if self.config.resources == 2:
+            return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
+        elif self.config.resources == 1:
+            return self.cpu[pm] + self.vm_cpu[vm] <= 1
+        else:
+            raise ValueError("Invalid number of resources")
 
     def _free_pm(self, pm, vm):
         self.cpu[pm] -= self.vm_cpu[vm]
@@ -97,13 +109,6 @@ class VmEnv(gym.Env):
         self.timestep += 1
         truncated = False
         return obs, reward, terminated, truncated, info  
-
-    @property
-    def n_actions(self) -> int:
-        if isinstance(self.action_space, spaces.Discrete):
-            return self.action_space.n
-        elif isinstance(self.action_space, spaces.MultiDiscrete):
-            return self.action_space.nvec.sum()
         
     def eval(self, eval_mode=True):
         self.eval_mode = eval_mode  
