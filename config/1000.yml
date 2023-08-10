@@ -16,6 +16,7 @@ agents:
       episodes: 100
       hidden_size: 512
       masked: true
+      device: cpu
   caviglione: 
       episodes: 100
       hidden_size: 512

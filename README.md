@@ -11,11 +11,14 @@ Experiment data are located in `data`. Plots are located in `plots`.
 ## Re-run Experiments
 
 ### Requirements
-
-Python 3.10.*
-
+To train models using CPU:
 ```shell
-pip install -r requirements.txt
+conda env create --name vm --file=cpu.yml
+```
+
+To train models using GPU:
+```shell
+conda env create --name vm --file=gpu.yml
 ```
 
 ### Examples
