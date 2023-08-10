@@ -87,21 +87,61 @@ def ortho_init(layer, scale=np.sqrt(2)):
     nn.init.constant_(layer.bias, 0)
     return layer
 
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, embed_size, heads):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.embed_size = embed_size
+        self.heads = heads
+        self.head_dim = embed_size // heads
+
+        assert self.head_dim * heads == embed_size, "Embedding size needs to be divisible by heads"
+
+        self.values = nn.Linear(self.head_dim, self.head_dim, bias=False)
+        self.keys = nn.Linear(self.head_dim, self.head_dim, bias=False)
+        self.queries = nn.Linear(self.head_dim, self.head_dim, bias=False)
+        self.fc_out = nn.Linear(heads * self.head_dim, embed_size)
+
+    def forward(self, x):
+        N, D = x.size()
+        assert D == self.embed_size, "Input features must be equal to embed_size"
+
+        # Separate the last dimension into (heads, head_dim)
+        values = x.view(N, self.heads, self.head_dim)
+        keys = x.view(N, self.heads, self.head_dim)
+        queries = x.view(N, self.heads, self.head_dim)
+
+        values = self.values(values)
+        keys = self.keys(keys)
+        queries = self.queries(queries)
+
+        # Scaled dot-product attention
+        attention = (queries @ keys.transpose(1, 2)) / self.head_dim**0.5
+        attention = nn.functional.softmax(attention, dim=2)
+
+        out = attention @ values
+        out = out.view(N, self.embed_size)
+        return self.fc_out(out)
+
+
 class Network(nn.Module): 
     def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int, dtype: torch.dtype):
         super(Network, self).__init__()
         self.action_nvec = action_space.nvec
+        self.attention = MultiHeadSelfAttention(embed_size=hidden_size, heads=8)
+
         self.critic = nn.Sequential(
             ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
+            self.attention,
             nn.Tanh(),
             ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
         )
+
+        # For actor
         self.actor = nn.Sequential(
             ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
             nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
+            self.attention,
             nn.Tanh(),
             ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
         )
@@ -190,6 +230,7 @@ class PPOAgent(Base):
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
             obs = torch.tensor(obs, device=self.config.device, dtype=self.float_dtype)
             done = False
+            pbar2 = tqdm(range(int(self.env.config.training_steps)), disable=not bool(self.config.training_progress_bar), desc='Training')
             while not done:
                 invalid_mask = torch.tensor(self.env.get_invalid_action_mask(self.config.masked), device=self.config.device)
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), invalid_mask=invalid_mask) # pass in a batch of size 1
@@ -214,6 +255,7 @@ class PPOAgent(Base):
                 obs = next_obs
                 self.total_steps += 1
                 current_ep_reward += reward  # For logging
+                pbar2.update(1)
 
             ep_returns[i_episode] = current_ep_reward
             if self.writer: 

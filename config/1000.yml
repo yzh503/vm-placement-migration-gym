@@ -17,6 +17,8 @@ agents:
       hidden_size: 512
       masked: true
       device: cpu
+      batch_size: 100
+      minibatch_size: 25
   caviglione: 
       episodes: 100
       hidden_size: 512
