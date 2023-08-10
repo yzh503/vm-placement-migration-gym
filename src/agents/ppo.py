@@ -15,7 +15,7 @@ import src.utils as utils
 class PPOConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
-    migration_ratio: float = 0.001
+    migration_ratio: float = 0.5
     masked: bool = True
     lr: float = 5e-5
     gamma: float = 0.99 # GAE parameter
@@ -148,6 +148,9 @@ class PPOAgent(Base):
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         invalid_mask = torch.tensor(self.env.get_invalid_action_mask(self.config.masked), dtype=bool, device=self.config.device)
+        for row in range(self.env.config.vms):
+            if torch.count_nonzero(invalid_mask[row, :]) > 1 and invalid_mask[row, self.env.config.pms] == False and np.random.rand() > self.config.migration_ratio:
+                invalid_mask[row, self.env.config.pms] = True
         obs = torch.tensor(obs, device=self.config.device, dtype=self.float_dtype).unsqueeze(0) # a batch of size 1
         if self.config.det:
             action = self.model.get_det_action(obs)

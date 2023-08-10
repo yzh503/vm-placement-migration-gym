@@ -16,15 +16,23 @@ def evaluate_wrapper(args, records):
 
 def evaluate(args, results):
 
-    agent, jobname, weightspath, load = args
+    rewardfn, agent, jobname, weightspath, load, migration_ratio = args
     configfile = open('config/1000.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
     config['environment']['eval_steps'] = exp.eval_steps
-    config['environment']['reward_function'] = "wr"
+    config['environment']['reward_function'] = rewardfn
     config['environment']['service_length'] = exp.service_length
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 4)
+    config['agents']['ppo']['migration_ratio'] = migration_ratio
+
+    if '-masked' in jobname: 
+        config['environment']['allow_null_action'] = True
+        config['agents']['ppo']['masked'] = True
+    if '-unmasked' in jobname:
+        config['environment']['allow_null_action'] = False
+        config['agents']['ppo']['masked'] = False
 
     args = []
     records = []
@@ -144,19 +152,14 @@ if __name__ == '__main__':
     results = {'step': [], 'load': [], 'agent': [], 'cpu_mean': [], 'cpu_var': [], 'memory_mean': [], 'memory_var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Load, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-wr.pt', exp.load), results)
-    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-wr.pt', exp.load), results)
-    to_print += evaluate(('firstfit', 'firstfit',None, exp.load), results)
-    to_print += evaluate(('bestfit', 'bestfit',None, exp.load), results)
-    to_print += evaluate(('convex', 'convex', None, exp.load), results)
+    to_print += evaluate(('kl', 'bestfit', 'bestfit',None, exp.load, 1), results)
+    to_print += evaluate(('kl', 'firstfit', 'firstfit',None, exp.load), results)
+    to_print += evaluate(('kl', 'ppo', 'ppo-kl', 'weights/ppo-kl.pt', exp.load, 0.15), results)
+    to_print += evaluate(('kl', 'caviglione', 'caviglione', 'weights/caviglione-kl.pt', exp.load, None), results)
+    to_print += evaluate(('kl', 'convex', 'convex', None, exp.load, None), results)
 
 
-    to_print += evaluate(('caviglione', 'caviglione', 'weights/caviglione-wr-low.pt', 0.75), results)
-    to_print += evaluate(('ppo', 'ppo', 'weights/ppo-wr-low.pt', 0.75), results)
-    to_print += evaluate(('firstfit', 'firstfit', None, 0.75), results)
-    to_print += evaluate(('bestfit', 'bestfit', None, 0.75), results)
-    to_print += evaluate(('convex', 'convex', None, 0.75), results)
-    
+
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')
 

@@ -106,11 +106,11 @@ if __name__ == '__main__':
     
     to_print = 'Model, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Waiting Ratio\n'
 
-    to_print += evaluate_seeds('ppo', 'weights/ppo-wr.pt', 'lowuniform')
+    to_print += evaluate_seeds('ppo', 'weights/ppo-kl.pt', 'lowuniform')
     to_print += evaluate_seeds('firstfit', None, 'lowuniform')
     to_print += evaluate_seeds('bestfit', None, 'lowuniform')
 
-    to_print += evaluate_seeds('ppo', 'weights/ppo-wr.pt', 'highuniform')
+    to_print += evaluate_seeds('ppo', 'weights/ppo-kl.pt', 'highuniform')
     to_print += evaluate_seeds('firstfit', None, 'highuniform')
     to_print += evaluate_seeds('bestfit', None, 'highuniform')
     

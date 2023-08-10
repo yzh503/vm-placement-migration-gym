@@ -1,24 +1,25 @@
 environment:  
-  pms: 100
-  vms: 300
+  pms: 10
+  vms: 30
   service_length: 1000
-  arrival_rate: 1.8182 # 100% system load: pms / distribution expectation / service length 
+  arrival_rate: 0.182 # 100% system load: pms / distribution expectation / service length 
   training_steps: 10000
   eval_steps: 100000
   seed: 0
-  reward_function: kl
+  reward_function: ut
   cap_target_util: true
   sequence: "uniform"
   beta: 0.5
   allow_null_action: true
 agents: 
   ppo: 
-      episodes: 100
-      hidden_size: 512
+      episodes: 10000
+      hidden_size: 64
+      migration_ratio: 0.005
       masked: true
   caviglione: 
-      episodes: 100
-      hidden_size: 512
+      episodes: 1000
+      hidden_size: 64
       device: cpu
   convex:
       migration_penalty: 1

@@ -24,10 +24,7 @@ class VmEnv(gym.Env):
         self.config = config
         self.eval_mode = False
         self.action_dim = self.config.pms + 2 if self.config.allow_null_action else self.config.pms + 1
-        if self.config.resources == 1:
-            self.observation_space = spaces.Box(low=0, high=self.config.pms + 2, shape=(self.config.vms * 2 + self.config.pms,))
-        else:
-            self.observation_space = spaces.Box(low=0, high=self.config.pms + 2, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
+        self.observation_space = spaces.Box(low=0, high=self.config.pms + 2, shape=(self.config.vms * 3 + self.config.pms * 2,)) 
         self.action_space = spaces.MultiDiscrete(np.full(self.config.vms , self.action_dim))  # Every VM has (PMs or wait action or null action) actions
         self.WAIT_STATUS = self.config.pms
         self.NULL_STATUS = self.config.pms + 1
@@ -56,12 +53,7 @@ class VmEnv(gym.Env):
             return mask
         
     def _resource_valid(self, vm, pm):
-        if self.config.resources == 2:
-            return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
-        elif self.config.resources == 1:
-            return self.cpu[pm] + self.vm_cpu[vm] <= 1
-        else:
-            raise ValueError("Invalid number of resources")
+        return self.cpu[pm] + self.vm_cpu[vm] <= 1 and self.memory[pm] + self.vm_memory[vm] <= 1
 
     def _free_pm(self, pm, vm):
         self.cpu[pm] -= self.vm_cpu[vm]

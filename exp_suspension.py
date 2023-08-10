@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
     load = exp.load
     for sr in np.arange(100, 4100, 200):
-        args.append(('caviglione', 'weights/caviglione-wr.pt', load, sr))
+        args.append(('caviglione', 'weights/caviglione-kl.pt', load, sr))
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
         args.append(('ppo', 'weights/ppo-wr.pt', load, sr))
@@ -85,10 +85,10 @@ if __name__ == '__main__':
 
     sr = exp.service_length
     for load in np.arange(0.2, 1.1, 0.1):
-        args.append(('caviglione', 'weights/caviglione-wr.pt', load, sr))
+        args.append(('caviglione', 'weights/caviglione-kl.pt', load, sr))
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-wr.pt', load, sr))
+        args.append(('ppo', 'weights/ppo-kl.pt', load, sr))
         args.append(('convex', '', load, sr))
 
     manager = multiprocessing.Manager()

@@ -10,7 +10,7 @@ import exp
 
 def evaluate_seeds(args):
 
-    agent, weightspath, rewardfn = args
+    agent, weightspath, rewardfn, migration_ratio = args
     configfile = open('config/1000.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
@@ -20,6 +20,7 @@ def evaluate_seeds(args):
     config['environment']['service_length'] = exp.service_length
     config['environment']['sequence'] = "uniform"
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
+    config['agents']['ppo']['migration_ratio'] = migration_ratio
     
     args = []
     records = []
@@ -105,9 +106,13 @@ if __name__ == '__main__':
     print("Evaluating Reward Functions...")
 
     to_print = 'Reward, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "kl"))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut"))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "wr"))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "kl", 0.45))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut", 0.02))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "wr", 0.15))
+    to_print += evaluate_seeds(('ppo', 'weights/caviglione-wr.pt', "kl", None))
+    to_print += evaluate_seeds(('ppo', 'weights/caviglione-ut.pt', "ut", None))
+    to_print += evaluate_seeds(('ppo', 'weights/caviglione-kl.pt', "wr", None))
+
 
     file = open('data/exp_reward/summary.csv', 'w')
     file.write(to_print)
