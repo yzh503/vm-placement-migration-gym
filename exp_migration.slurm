@@ -10,7 +10,7 @@
 #SBATCH --account="punim0487"
 
 # Maximum number of tasks/CPU cores used by the job:
-#SBATCH --ntasks=20
+#SBATCH --ntasks=24
 #SBATCH --cpus-per-task=1
 
 # Slurm QoS:
