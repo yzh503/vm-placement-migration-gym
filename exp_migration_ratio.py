@@ -68,6 +68,8 @@ if __name__ == '__main__':
         args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
         args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
         args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
+        args.append(('ppo-kl', 'weights/ppo-att-kl.pt', 'kl', migration_ratio))
+
 
     manager = multiprocessing.Manager()
     results = manager.list()
