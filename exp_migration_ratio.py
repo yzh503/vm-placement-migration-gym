@@ -20,6 +20,9 @@ def evaluate(args):
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
     config['agents']['ppo']['migration_ratio'] = migration_ratio
 
+    if '-att-' in weightspath:
+        config['agents']['ppo']['attention'] = True
+        
     args = []
 
     recordname = 'data/exp_migration_ratio/%s-%.3f.json' % (agent, migration_ratio)

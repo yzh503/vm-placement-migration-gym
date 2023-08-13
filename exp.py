@@ -1,5 +1,5 @@
-cores = 8               # Number of cores to run experiments
-multiruns = 8           # Number of runs to take average in experiments
+cores = 20              # Number of cores to run experiments
+multiruns = 10          # Number of runs to take average in experiments
 eval_steps = 150000       # Number of steps in an evaluation episode in experiments
 service_length = 1000   # Number of steps in a VM lifetime in experiments
 load = 1.0                # default system load

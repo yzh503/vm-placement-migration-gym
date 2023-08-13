@@ -31,6 +31,7 @@ class PPOConfig(Config):
     minibatch_size: int = 25    
     det: bool = False # Determinisitc action for evaludation
     network_arch: str = "separate"
+    attention: bool = False
     reward_scaling: bool = False
     training_progress_bar: bool = True
     device: str = "cpu"
@@ -124,27 +125,45 @@ class MultiHeadSelfAttention(nn.Module):
 
 
 class Network(nn.Module): 
-    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int, dtype: torch.dtype):
+    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int, dtype: torch.dtype, attention: bool = False):
         super(Network, self).__init__()
         self.action_nvec = action_space.nvec
-        self.attention = MultiHeadSelfAttention(embed_size=hidden_size, heads=8)
 
-        self.critic = nn.Sequential(
-            ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
-            nn.Tanh(),
-            self.attention,
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
-        )
+        if attention:
 
-        # For actor
-        self.actor = nn.Sequential(
-            ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
-            nn.Tanh(),
-            self.attention,
-            nn.Tanh(),
-            ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
-        )
+            self.attention = MultiHeadSelfAttention(embed_size=hidden_size, heads=8)
+
+            self.critic = nn.Sequential(
+                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
+                nn.Tanh(),
+                self.attention,
+                nn.Tanh(),
+                ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
+            )
+
+            # For actor
+            self.actor = nn.Sequential(
+                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
+                nn.Tanh(),
+                self.attention,
+                nn.Tanh(),
+                ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
+            )
+        else: 
+            self.critic = nn.Sequential(
+                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
+                nn.Tanh(),
+                ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
+                nn.Tanh(),
+                ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
+            )
+            self.actor = nn.Sequential(
+                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
+                nn.Tanh(),
+                ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
+                nn.Tanh(),
+                ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
+            )
 
     def get_value(self, obs):
         return self.critic(obs)
@@ -176,7 +195,7 @@ class PPOAgent(Base):
     def init_model(self):
         self.float_dtype = torch.float32
         self.obs_dim = self.env.observation_space.shape[0]
-        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, self.float_dtype) 
+        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, self.float_dtype, self.config.attention) 
         self.model = torch.compile(self.model).to(self.config.device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.config.lr)
 
