@@ -4,6 +4,7 @@ from src.agents.base import Base, Config
 from src.utils import convert_obs_to_dict
 import cvxpy as cvx
 from vmenv.envs.env import VmEnv
+import cvxpy.settings as s
 
 @dataclass
 class ConvexConfig(Config): 
@@ -44,7 +45,7 @@ class ConvexAgent(Base):
             i, placement = self.queue.pop(0)
             vm_placement[i] = placement
         
-        to_skip = self.env.timestep % self.config.frequency > 0 and self.env.config.eval_steps - self.env.timestep > self.config.frequency
+        to_skip = self.env.timestep % self.config.frequency > 0 and self.env.config.eval_steps != self.env.timestep
         if has_migration or to_skip:
             return vm_placement
         
@@ -76,6 +77,7 @@ class ConvexAgent(Base):
 
         cols_to_optimize = np.ones(P, dtype=bool) 
         rows_to_optimize = vm_placement <= P 
+
         rows_optimized = []
         while rows_to_optimize.any() and cols_to_optimize.any():
             rows = np.count_nonzero(vm_placement <= P)
@@ -116,15 +118,14 @@ class ConvexAgent(Base):
             plm = M[vm_placement <= P][:, cols_to_optimize]
             summed_product = cvx.sum(cvx.multiply(plm, (1 - X)))
             penalty = self.config.migration_penalty * summed_product
-            objective = cvx.Minimize(cvx.sum(-X) + penalty)
+            objective = cvx.Minimize(cvx.sum(-X) ) # Rank minimization is unsolvable if PMs are insufficient
             problem = cvx.Problem(objective, constraints)
-            print("Number of VMs to optimize: ", len(optimising))
             try: 
-                problem.solve(solver=cvx.GLPK_MI, verbose=True, max_seconds=60)
+                problem.solve(solver=cvx.SCIP, scip_params={"limits/time": 5})
             except cvx.SolverError as e:
                 print(e)
                 break
-            print("Status:", problem.status)
+ 
             # No solution found due to high number of VMs. 
             if problem.status != cvx.OPTIMAL:
                 break
@@ -136,7 +137,6 @@ class ConvexAgent(Base):
             # For each placement, if the VM placement exceeds the physical limit, remove the PM from the optimisation list.
             sorted_indices = np.argmax(X_opt, axis=1)
             for v, p in enumerate(sorted_indices): 
-                print("VM %d is placed on PM %d" % (v, p))
                 if not rows_to_optimize[v]:
                     continue
                 
@@ -151,13 +151,10 @@ class ConvexAgent(Base):
                 # Check if the PM is overloaded
                 overloaded = np.logical_or(Am @ X_full > 1, Bm @ X_full > 1)
                 if overloaded.any(): 
-                    print("VM %d is placed on PM %d, but PM is overloaded" % (v, p_full))
                     cols_to_optimize[p_full] = False
                     X_opt = np.delete(X_opt, p, axis=1)
                     X_full[v, :] = M[vm_placement <= P][v, p_full]
-                    print("2VM %d is placed on PM %d" % (v, p_full))
                 else: 
-                    print("VM %d is placed on PM %d" % (v, p_full))
                     rows_optimized.append((v, X_full[v]))
                     rows_to_optimize[v] = False
 
@@ -167,8 +164,7 @@ class ConvexAgent(Base):
                         break
 
             M[vm_placement <= P] = X_full[:]
-            print(len(rows_to_optimize), len(cols_to_optimize))
-        print("Number of VMs placed: ", len(rows_optimized))
+
         for v, row in rows_optimized: 
             pm = np.argwhere(row == 1).flatten() # pm is the index of available PMs
             if pm.size == 1:
