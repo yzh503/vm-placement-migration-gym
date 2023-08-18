@@ -81,10 +81,9 @@ class ConvexAgent(Base):
 
         rows_optimized = []
         while rows_to_optimize.any() and cols_to_optimize.any():
-            rows = np.count_nonzero(vm_placement <= P)
             cols = np.count_nonzero(cols_to_optimize)
             rows_formatted = []
-            S = np.zeros((rows, cols)) 
+            S = np.zeros_like(M[:, cols_to_optimize])
 
             optimising = []
             for i, row in enumerate(M[:, cols_to_optimize]): 
