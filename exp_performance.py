@@ -16,8 +16,8 @@ def evaluate_wrapper(args, records):
 
 def evaluate(args, results):
 
-    rewardfn, agent, jobname, weightspath, load, migration_ratio = args
-    configfile = open('config/1000.yml')
+    rewardfn, agent, jobname, weightspath, load = args
+    configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -25,7 +25,6 @@ def evaluate(args, results):
     config['environment']['reward_function'] = rewardfn
     config['environment']['service_length'] = exp.service_length
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 4)
-    config['agents']['ppo']['migration_ratio'] = migration_ratio
 
     if '-masked' in jobname: 
         config['environment']['allow_null_action'] = True
@@ -152,11 +151,11 @@ if __name__ == '__main__':
     results = {'step': [], 'load': [], 'agent': [], 'cpu_mean': [], 'cpu_var': [], 'memory_mean': [], 'memory_var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Load, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    to_print += evaluate(('kl', 'bestfit', 'bestfit',None, exp.load, 1), results)
-    to_print += evaluate(('kl', 'firstfit', 'firstfit',None, exp.load), results)
-    to_print += evaluate(('kl', 'ppo', 'ppo-kl', 'weights/ppo-kl.pt', exp.load, 0.15), results)
-    to_print += evaluate(('kl', 'caviglione', 'caviglione', 'weights/caviglione-kl.pt', exp.load, None), results)
-    to_print += evaluate(('kl', 'convex', 'convex', None, exp.load, None), results)
+    to_print += evaluate(('ut', 'bestfit', 'bestfit',None, exp.load), results)
+    to_print += evaluate(('ut', 'firstfit', 'firstfit',None, exp.load), results)
+    to_print += evaluate(('ut', 'ppo', 'ppo-wr', 'weights/ppo-wr.pt', exp.load), results)
+    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-kl.pt', exp.load), results)
+    to_print += evaluate(('ut', 'convex', 'convex', None, exp.load), results)
 
 
 

@@ -31,7 +31,6 @@ class PPOConfig(Config):
     minibatch_size: int = 25    
     det: bool = False # Determinisitc action for evaludation
     network_arch: str = "separate"
-    attention: bool = False
     reward_scaling: bool = False
     training_progress_bar: bool = True
     device: str = "cpu"
@@ -88,82 +87,26 @@ def ortho_init(layer, scale=np.sqrt(2)):
     nn.init.constant_(layer.bias, 0)
     return layer
 
-class MultiHeadSelfAttention(nn.Module):
-    def __init__(self, embed_size, heads):
-        super(MultiHeadSelfAttention, self).__init__()
-        self.embed_size = embed_size
-        self.heads = heads
-        self.head_dim = embed_size // heads
-
-        assert self.head_dim * heads == embed_size, "Embedding size needs to be divisible by heads"
-
-        self.values = nn.Linear(self.head_dim, self.head_dim, bias=False)
-        self.keys = nn.Linear(self.head_dim, self.head_dim, bias=False)
-        self.queries = nn.Linear(self.head_dim, self.head_dim, bias=False)
-        self.fc_out = nn.Linear(heads * self.head_dim, embed_size)
-
-    def forward(self, x):
-        N, D = x.size()
-        assert D == self.embed_size, "Input features must be equal to embed_size"
-
-        # Separate the last dimension into (heads, head_dim)
-        values = x.view(N, self.heads, self.head_dim)
-        keys = x.view(N, self.heads, self.head_dim)
-        queries = x.view(N, self.heads, self.head_dim)
-
-        values = self.values(values)
-        keys = self.keys(keys)
-        queries = self.queries(queries)
-
-        # Scaled dot-product attention
-        attention = (queries @ keys.transpose(1, 2)) / self.head_dim**0.5
-        attention = nn.functional.softmax(attention, dim=2)
-
-        out = attention @ values
-        out = out.view(N, self.embed_size)
-        return self.fc_out(out)
-
 
 class Network(nn.Module): 
-    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int, dtype: torch.dtype, attention: bool = False):
+    def __init__(self, input_size: int, action_space: gymnasium.spaces.multi_discrete.MultiDiscrete, hidden_size: int, dtype: torch.dtype):
         super(Network, self).__init__()
         self.action_nvec = action_space.nvec
 
-        if attention:
-
-            self.attention = MultiHeadSelfAttention(embed_size=hidden_size, heads=8)
-
-            self.critic = nn.Sequential(
-                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
-                nn.Tanh(),
-                self.attention,
-                nn.Tanh(),
-                ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
-            )
-
-            # For actor
-            self.actor = nn.Sequential(
-                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
-                nn.Tanh(),
-                self.attention,
-                nn.Tanh(),
-                ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
-            )
-        else: 
-            self.critic = nn.Sequential(
-                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
-                nn.Tanh(),
-                ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
-                nn.Tanh(),
-                ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
-            )
-            self.actor = nn.Sequential(
-                ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
-                nn.Tanh(),
-                ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
-                nn.Tanh(),
-                ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
-            )
+        self.critic = nn.Sequential(
+            ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
+            nn.Tanh(),
+            ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
+            nn.Tanh(),
+            ortho_init(nn.Linear(hidden_size, 1, dtype=dtype), scale=1)
+        )
+        self.actor = nn.Sequential(
+            ortho_init(nn.Linear(input_size, hidden_size, dtype=dtype)),
+            nn.Tanh(),
+            ortho_init(nn.Linear(hidden_size, hidden_size, dtype=dtype)),
+            nn.Tanh(),
+            ortho_init(nn.Linear(hidden_size, self.action_nvec.sum(), dtype=dtype), scale=0.01)
+        )
 
     def get_value(self, obs):
         return self.critic(obs)
@@ -195,7 +138,7 @@ class PPOAgent(Base):
     def init_model(self):
         self.float_dtype = torch.float32
         self.obs_dim = self.env.observation_space.shape[0]
-        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, self.float_dtype, self.config.attention) 
+        self.model = Network(self.obs_dim, self.env.action_space, self.config.hidden_size, self.float_dtype) 
         self.model = torch.compile(self.model).to(self.config.device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.config.lr)
 

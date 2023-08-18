@@ -10,7 +10,7 @@ import time
 
 def evaluate(args):
     agent, weightspath, rewardfn, migration_ratio = args
-    configfile = open('config/1000.yml')
+    configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms
@@ -20,9 +20,6 @@ def evaluate(args):
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
     config['agents']['ppo']['migration_ratio'] = migration_ratio
 
-    if '-att-' in weightspath:
-        config['agents']['ppo']['attention'] = True
-        
     args = []
 
     recordname = 'data/exp_migration_ratio/%s-%.3f.json' % (agent, migration_ratio)
@@ -67,11 +64,20 @@ if __name__ == '__main__':
     to_print = 'Agent, Migration Discount, Total Served, CPU, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
-    for migration_ratio in np.arange(0.0, 1.0, 0.05):
+    for migration_ratio in np.arange(0.0, 1.1, 0.1):
         args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
         args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
         args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
-        args.append(('ppo-kl', 'weights/ppo-att-kl.pt', 'kl', migration_ratio))
+    
+    for migration_ratio in np.arange(0.0, 0.1, 0.01):
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
+
+    for migration_ratio in np.arange(0.0, 0.01, 0.001):
+        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
+        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
+        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
 
 
     manager = multiprocessing.Manager()

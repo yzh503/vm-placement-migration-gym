@@ -7,7 +7,7 @@ import copy
 import exp
 
 def evaluate_var(vars, evalmode):
-    configfile = open('config/1000.yml')
+    configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
     config['environment']['pms'] = exp.pms
     config['environment']['vms'] = exp.vms

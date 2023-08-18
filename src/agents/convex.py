@@ -8,10 +8,11 @@ import cvxpy.settings as s
 
 @dataclass
 class ConvexConfig(Config): 
-    migration_penalty: float = 30
+    migration_penalty: float = 0
     W: int = 300 
     hard_solution: bool = False
-    frequency: int = 10
+    frequency: int = 1
+    timeout: int = 3
 
 class ConvexAgent(Base):
     def __init__(self, env: VmEnv, config: ConvexConfig):
@@ -118,12 +119,12 @@ class ConvexAgent(Base):
             plm = M[vm_placement <= P][:, cols_to_optimize]
             summed_product = cvx.sum(cvx.multiply(plm, (1 - X)))
             penalty = self.config.migration_penalty * summed_product
-            objective = cvx.Minimize(cvx.sum(-X) ) # Rank minimization is unsolvable if PMs are insufficient
+            objective = cvx.Minimize(cvx.sum(-X) + penalty) # Rank minimization is unsolvable if PMs are insufficient
             problem = cvx.Problem(objective, constraints)
             try: 
-                problem.solve(solver=cvx.SCIP, scip_params={"limits/time": 5})
+                problem.solve(solver=cvx.SCIP, scip_params={"limits/time": self.config.timeout})
             except cvx.SolverError as e:
-                print(e)
+                print(e)    
                 break
  
             # No solution found due to high number of VMs. 

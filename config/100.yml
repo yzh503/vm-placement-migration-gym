@@ -4,7 +4,7 @@ environment:
   service_length: 1000
   arrival_rate: 1.8182 # 100% system load: pms / distribution expectation / service length 
   training_steps: 10000
-  eval_steps: 100000
+  eval_steps: 1000
   seed: 0
   reward_function: kl
   cap_target_util: true
@@ -16,10 +16,14 @@ agents:
       episodes: 100
       hidden_size: 512
       masked: true
+      device: cpu
+      batch_size: 100
+      minibatch_size: 25
+      migration_ratio: 0.002
   caviglione: 
       episodes: 100
       hidden_size: 512
       device: cpu
   convex:
-      migration_penalty: 1
-      W: 30
+      migration_penalty: 0
+      W: 300

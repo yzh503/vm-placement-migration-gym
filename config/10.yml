@@ -1,8 +1,8 @@
 environment:  
-  pms: 100
-  vms: 300
+  pms: 10
+  vms: 30
   service_length: 1000
-  arrival_rate: 1.8182 # 100% system load: pms / distribution expectation / service length 
+  arrival_rate: 0.18182 # 100% system load: pms / distribution expectation / service length 
   training_steps: 10000
   eval_steps: 100000
   seed: 0
@@ -16,13 +16,10 @@ agents:
       episodes: 100
       hidden_size: 512
       masked: true
-      device: cpu
-      batch_size: 100
-      minibatch_size: 25
   caviglione: 
       episodes: 100
       hidden_size: 512
       device: cpu
   convex:
-      migration_penalty: 1
+      migration_penalty: 0
       W: 30
