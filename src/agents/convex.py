@@ -8,8 +8,9 @@ from vmenv.envs.env import VmEnv
 @dataclass
 class ConvexConfig(Config): 
     migration_penalty: float = 30
-    W: int = 12 
+    W: int = 300 
     hard_solution: bool = False
+    frequency: int = 10
 
 class ConvexAgent(Base):
     def __init__(self, env: VmEnv, config: ConvexConfig):
@@ -43,9 +44,9 @@ class ConvexAgent(Base):
             i, placement = self.queue.pop(0)
             vm_placement[i] = placement
         
-        if has_migration:
+        if has_migration or self.env.timestep % self.config.frequency == 0 or self.env.config.eval_steps - self.env.timestep < self.config.frequency:
             return vm_placement
-
+        
         new_placement = self.maximize_nuclear_norm(P, V, vm_cpu, vm_memory, vm_placement.copy())
 
         # ExtractVM migrations and add them into the queue
@@ -64,7 +65,6 @@ class ConvexAgent(Base):
     # B is the 1xV vector of VMs' memory utilization
     # X_values is the VxP matrix of VMs' placement
     def maximize_nuclear_norm(self, P, V, A, B, vm_placement):
-        print('maximize_nuclear_norm')
         if (vm_placement > P).all(): # No VM is arrived yet
             return vm_placement
 
@@ -73,8 +73,8 @@ class ConvexAgent(Base):
             if pm < P:
                 M[i, pm] = 1 
 
-        cols_to_optimize = np.ones(P, dtype=bool)
-        rows_to_optimize = vm_placement <= P # variable rows
+        cols_to_optimize = np.ones(P, dtype=bool) 
+        rows_to_optimize = vm_placement <= P 
         rows_optimized = []
         while rows_to_optimize.any() and cols_to_optimize.any():
             rows = np.count_nonzero(vm_placement <= P)
@@ -82,24 +82,20 @@ class ConvexAgent(Base):
             rows_formatted = []
             S = np.zeros((rows, cols)) 
 
-            # only has 1 variable row, becuase multiple variable rows may get stuck in infeasible problem'
-            variables = 0
-            optimising = None
+            optimising = []
             for i, row in enumerate(M[:, cols_to_optimize]): # iterate all rows here because rows_to_optimize is reducing
-                if variables == 0 and rows_to_optimize[i]:
+                if rows_to_optimize[i]:
                     Z = cvx.Variable((1, cols))
                     Z.value = row.reshape(1, -1)
                     rows_formatted.append(Z)
                     S[i, :] = 1
-                    variables += 1
-                    print('optimising row', i)
-                    optimising = i
+                    optimising.append(i)
                 elif vm_placement[i] <= P: # ignore unarrived VMs
                     rows_formatted.append(row.reshape(1, -1))
 
-            if variables < 1:
-                break
-            
+            if len(optimising) < 1:
+                return vm_placement
+
             # X is a binary matrix of shape V * P, where V is the number of VMs and P is the number of servers
             # R is resource matrix of shape 2 * P, where P is the number of servers
             # cvx.multiply(M[vm_placement <= P], 1 - X) @ onesn represents if corresponding VM was initially placed on one server and finally re-placed on another server. 
@@ -107,18 +103,14 @@ class ConvexAgent(Base):
             X = cvx.bmat(rows_formatted)
 
             Am = A[vm_placement <= P].reshape(1, -1)
-            Amc = np.repeat(Am, cols, axis=0)
-            Amf = np.repeat(Am, P, axis=0)
             Bm = B[vm_placement <= P].reshape(1, -1)
-            Bmc = np.repeat(Bm, cols, axis=0)
-            Bmf = np.repeat(Bm, P, axis=0)
 
             constraints = [
                 X >= 0,
                 X <= 1,
                 cvx.sum(S @ X.T, axis=0) == 1,  
-                Amc @ X <= 1,
-                Bmc @ X <= 1
+                Am @ X <= 1,
+                Bm @ X <= 1
             ]
             plm = M[vm_placement <= P][:, cols_to_optimize]
             summed_product = cvx.sum(cvx.multiply(plm, (1 - X)))
@@ -127,37 +119,17 @@ class ConvexAgent(Base):
 
             prob = cvx.Problem(objective, constraints)
             try: 
-                prob.solve()
+                prob.solve(solver=cvx.SCS)
             except cvx.SolverError as e:
                 print(e)
                 break
 
-            print(prob.status, variables, rows, cols, penalty.value, summed_product.value)
+            
             
             # No solution found due to high number of VMs. 
             if prob.status != cvx.OPTIMAL:
                 self.no_solution_iter += 1
-                if self.config.hard_solution:
-                    # Reduce the rows to optimise. Reduce the placed VMs first.
-                    # In rows_to_optimize, find the first row that has col 0 True and set the row as False
-                    index = np.argmax(rows_to_optimize[:, 0])
-                    rows_to_optimize[index, :] = False
-
-                    migratable_reduced = np.logical_and(rows_to_optimize == True, vm_placement < P)
-                    placable_reduced = np.logical_and(rows_to_optimize == True, vm_placement == P)
-                    if migratable_reduced.any():
-                        reduced = np.where(migratable_reduced)[0][0]
-                        rows_to_optimize[reduced] = False
-                    elif placable_reduced.any():
-                        reduced = np.where(placable_reduced)[0][0]
-                        rows_to_optimize[reduced] = False
-                    else: 
-                        break
-                    continue # try again with reduced rows
-                else:
-                    rows_to_optimize[optimising] = False
-                    continue
-
+                break
             X_full = M[vm_placement <= P].copy() # use vm_placement <= P here because rows_to_optimize is reducing
             X_opt = np.array(X.value)
 
@@ -165,6 +137,9 @@ class ConvexAgent(Base):
             # For each placement, if the VM placement exceeds the physical limit, remove the PM from the optimisation list.
             sorted_indices = np.argmax(X_opt, axis=1)
             for v, p in enumerate(sorted_indices): 
+                if not rows_to_optimize[v]:
+                    continue
+                
                 # each placement is done for a VM, clear the vm placement. 
                 X_full[v, :] = 0
                 available_pms = np.argwhere(cols_to_optimize == True).flatten()
@@ -174,7 +149,7 @@ class ConvexAgent(Base):
                 X_full[v, p_full] = 1
 
                 # Check if the PM is overloaded
-                overloaded = np.logical_or(Amf @ X_full > 1, Bmf @ X_full > 1)
+                overloaded = np.logical_or(Am @ X_full > 1, Bm @ X_full > 1)
                 if overloaded.any(): 
                     cols_to_optimize[p_full] = False
                     X_opt = np.delete(X_opt, p, axis=1)
@@ -185,10 +160,10 @@ class ConvexAgent(Base):
 
                     # Decision window (maximum number of VMs to be placed)
                     if len(rows_optimized) >= self.config.W:
+                        rows_to_optimize[:] = False
                         break
 
             M[vm_placement <= P] = X_full[:]
-            assert rows > np.count_nonzero(rows_to_optimize), f'{rows} > {np.count_nonzero(rows_to_optimize)}'
         
         for v, row in rows_optimized: 
             pm = np.argwhere(row == 1).flatten() # pm is the index of available PMs

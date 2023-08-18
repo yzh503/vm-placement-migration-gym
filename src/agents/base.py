@@ -67,7 +67,7 @@ class Base:
         obs, info = self.env.reset(seed=self.env.config.seed)
         done = False
 
-        pbar = tqdm(total=self.env.config.eval_steps, leave=False)
+        pbar = tqdm(total=self.env.config.eval_steps)
         while not done: 
             if debug: 
                 self.env.render()
