@@ -44,7 +44,8 @@ class ConvexAgent(Base):
             i, placement = self.queue.pop(0)
             vm_placement[i] = placement
         
-        if has_migration or self.env.timestep % self.config.frequency == 0 or self.env.config.eval_steps - self.env.timestep < self.config.frequency:
+        to_skip = self.env.timestep % self.config.frequency > 0 and self.env.config.eval_steps - self.env.timestep > self.config.frequency
+        if has_migration or to_skip:
             return vm_placement
         
         new_placement = self.maximize_nuclear_norm(P, V, vm_cpu, vm_memory, vm_placement.copy())
@@ -83,9 +84,9 @@ class ConvexAgent(Base):
             S = np.zeros((rows, cols)) 
 
             optimising = []
-            for i, row in enumerate(M[:, cols_to_optimize]): # iterate all rows here because rows_to_optimize is reducing
+            for i, row in enumerate(M[:, cols_to_optimize]): 
                 if rows_to_optimize[i]:
-                    Z = cvx.Variable((1, cols))
+                    Z = cvx.Variable((1, cols), integer=True)
                     Z.value = row.reshape(1, -1)
                     rows_formatted.append(Z)
                     S[i, :] = 1
@@ -104,32 +105,30 @@ class ConvexAgent(Base):
 
             Am = A[vm_placement <= P].reshape(1, -1)
             Bm = B[vm_placement <= P].reshape(1, -1)
-
+            ones = np.ones((cols, 1))
             constraints = [
                 X >= 0,
                 X <= 1,
-                cvx.sum(S @ X.T, axis=0) == 1,  
+                X @ ones <= 1,
                 Am @ X <= 1,
                 Bm @ X <= 1
             ]
             plm = M[vm_placement <= P][:, cols_to_optimize]
             summed_product = cvx.sum(cvx.multiply(plm, (1 - X)))
             penalty = self.config.migration_penalty * summed_product
-            objective = cvx.Minimize(cvx.norm(X, 'nuc') + penalty)
-
-            prob = cvx.Problem(objective, constraints)
+            objective = cvx.Minimize(cvx.sum(-X) + penalty)
+            problem = cvx.Problem(objective, constraints)
+            print("Number of VMs to optimize: ", len(optimising))
             try: 
-                prob.solve(solver=cvx.SCS)
+                problem.solve(solver=cvx.GLPK_MI, verbose=True, max_seconds=60)
             except cvx.SolverError as e:
                 print(e)
                 break
-
-            
-            
+            print("Status:", problem.status)
             # No solution found due to high number of VMs. 
-            if prob.status != cvx.OPTIMAL:
-                self.no_solution_iter += 1
+            if problem.status != cvx.OPTIMAL:
                 break
+
             X_full = M[vm_placement <= P].copy() # use vm_placement <= P here because rows_to_optimize is reducing
             X_opt = np.array(X.value)
 
@@ -137,6 +136,7 @@ class ConvexAgent(Base):
             # For each placement, if the VM placement exceeds the physical limit, remove the PM from the optimisation list.
             sorted_indices = np.argmax(X_opt, axis=1)
             for v, p in enumerate(sorted_indices): 
+                print("VM %d is placed on PM %d" % (v, p))
                 if not rows_to_optimize[v]:
                     continue
                 
@@ -151,10 +151,13 @@ class ConvexAgent(Base):
                 # Check if the PM is overloaded
                 overloaded = np.logical_or(Am @ X_full > 1, Bm @ X_full > 1)
                 if overloaded.any(): 
+                    print("VM %d is placed on PM %d, but PM is overloaded" % (v, p_full))
                     cols_to_optimize[p_full] = False
                     X_opt = np.delete(X_opt, p, axis=1)
                     X_full[v, :] = M[vm_placement <= P][v, p_full]
+                    print("2VM %d is placed on PM %d" % (v, p_full))
                 else: 
+                    print("VM %d is placed on PM %d" % (v, p_full))
                     rows_optimized.append((v, X_full[v]))
                     rows_to_optimize[v] = False
 
@@ -164,7 +167,8 @@ class ConvexAgent(Base):
                         break
 
             M[vm_placement <= P] = X_full[:]
-        
+            print(len(rows_to_optimize), len(cols_to_optimize))
+        print("Number of VMs placed: ", len(rows_optimized))
         for v, row in rows_optimized: 
             pm = np.argwhere(row == 1).flatten() # pm is the index of available PMs
             if pm.size == 1:
