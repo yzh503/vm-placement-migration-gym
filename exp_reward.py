@@ -1,12 +1,17 @@
 import ujson
 import yaml
 import numpy as np
-from multiprocessing import Pool
+import multiprocessing
 from os.path import exists
 import copy
 import main 
 from src.record import Record
 import exp
+import time
+
+def evaluate_wrapper(args, records):
+    record = main.run(args)
+    records.append(record)
 
 def evaluate_seeds(args):
 
@@ -25,7 +30,7 @@ def evaluate_seeds(args):
     args = []
     records = []
     for seed in np.arange(0, exp.multiruns): 
-        recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
+        recordname = f'data/exp_reward/{agent}-{rewardfn}-{seed}.json'     
         if exists(recordname):
             print(f"{recordname} exists")
             f = open(recordname, 'r')
@@ -49,14 +54,36 @@ def evaluate_seeds(args):
                     weightspath=weightspath,
                     eval=True,
                     debug=False))
+    
+    manager = multiprocessing.Manager()
+    new_records = manager.list()
+    processes = []
+    for arg in args:
+        while len(processes) >= exp.cores:
+            for p in processes:
+                if not p.is_alive():
+                    p.join()
+                    processes.remove(p)
+                    break
+            else:
+                time.sleep(2) # If no process has finished yet, wait a bit and check again
 
-    if len(args) > 0:
-        with Pool(exp.multiruns) as pool: 
-            for record in pool.imap_unordered(main.run, args): 
-                seed = record.env_config['seed']
-                recordname = f'data/exp_reward/{rewardfn}-{seed}.json'     
-                record.save(recordname)
-                records.append(record)
+        p = multiprocessing.Process(target=evaluate_wrapper, args=(arg, new_records))
+        p.daemon = False  
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()
+
+    for record in new_records:
+        seed = record.env_config['seed']
+        rewardfn = record.env_config['reward_function']
+        agent = record.agent
+        recordname = f'data/exp_reward/{agent}-{rewardfn}-{seed}.json'        
+        record.save(recordname)
+        records.append(record)
+
 
     returns, served_reqs, cpu, memory, drop_rates, suspended, waiting_ratios, pending_rates, slowdown_rates = [], [], [], [], [], [], [], [], []
     total_suspended = []
@@ -106,12 +133,12 @@ if __name__ == '__main__':
     print("Evaluating Reward Functions...")
 
     to_print = 'Reward, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "kl", 0.45))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut", 0.02))
-    to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "wr", 0.15))
-    to_print += evaluate_seeds(('ppo', 'weights/caviglione-wr.pt', "kl", None))
-    to_print += evaluate_seeds(('ppo', 'weights/caviglione-ut.pt', "ut", None))
-    to_print += evaluate_seeds(('ppo', 'weights/caviglione-kl.pt', "wr", None))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "wr", 0.002))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut", 0.002))
+    to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "kl", 0.002))
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-wr.pt', "wr", None))
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-ut.pt', "ut", None))
+    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-kl.pt', "kl", None))
 
 
     file = open('data/exp_reward/summary.csv', 'w')

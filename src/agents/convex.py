@@ -11,7 +11,7 @@ class ConvexConfig(Config):
     migration_penalty: float = 0
     W: int = 300 
     hard_solution: bool = False
-    frequency: int = 1
+    frequency: int = 3
     timeout: int = 3
 
 class ConvexAgent(Base):
