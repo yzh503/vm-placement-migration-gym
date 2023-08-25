@@ -153,8 +153,8 @@ if __name__ == '__main__':
     
     to_print += evaluate(('ut', 'bestfit', 'bestfit',None, exp.load), results)
     to_print += evaluate(('ut', 'firstfit', 'firstfit',None, exp.load), results)
-    to_print += evaluate(('ut', 'ppo', 'ppo-wr', 'weights/ppo-wr.pt', exp.load), results)
-    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-kl.pt', exp.load), results)
+    to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', exp.load), results)
+    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', exp.load), results)
     to_print += evaluate(('ut', 'convex', 'convex', None, exp.load), results)
 
 
