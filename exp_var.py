@@ -9,9 +9,6 @@ import exp
 def evaluate_var(vars, evalmode):
     configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
-    config['environment']['pms'] = exp.pms
-    config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.eval_steps
     
     args = []
 
@@ -19,10 +16,8 @@ def evaluate_var(vars, evalmode):
         config = copy.deepcopy(config)
         config['environment']['var'] = var
 
-        # Only if the service length is long enough would migration be worthwhile. 
         if evalmode: 
-            config['environment']['service_length'] = exp.service_length
-            config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
+            config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'], 3)
 
         recordname = f'data/exp_var/{var}.json'
         weightsname = f'data/exp_var/{var}.pt'

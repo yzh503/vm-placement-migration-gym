@@ -12,10 +12,6 @@ import exp
 def evaluate_seeds(agent, weightspath, seq):
     configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
-    config['environment']['pms'] = exp.pms
-    config['environment']['vms'] = exp.vms
-    config['environment']['service_length'] = exp.service_length
-    config['environment']['eval_steps'] = exp.eval_steps
     config['environment']['sequence'] = seq
 
     if seq == 'lowuniform':
@@ -106,11 +102,11 @@ if __name__ == '__main__':
     
     to_print = 'Model, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Waiting Ratio\n'
 
-    to_print += evaluate_seeds('ppo', 'weights/ppo-kl.pt', 'lowuniform')
+    to_print += evaluate_seeds('ppo', 'weights/ppo-ut.pt', 'lowuniform')
     to_print += evaluate_seeds('firstfit', None, 'lowuniform')
     to_print += evaluate_seeds('bestfit', None, 'lowuniform')
 
-    to_print += evaluate_seeds('ppo', 'weights/ppo-kl.pt', 'highuniform')
+    to_print += evaluate_seeds('ppo', 'weights/ppo-ut.pt', 'highuniform')
     to_print += evaluate_seeds('firstfit', None, 'highuniform')
     to_print += evaluate_seeds('bestfit', None, 'highuniform')
     

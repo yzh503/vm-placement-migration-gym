@@ -4,13 +4,12 @@ from src.agents.base import Base, Config
 from src.utils import convert_obs_to_dict
 import cvxpy as cvx
 from vmenv.envs.env import VmEnv
-import cvxpy.settings as s
+import threading
 
 @dataclass
 class ConvexConfig(Config): 
     migration_penalty: float = 0
-    W: int = 300 
-    hard_solution: bool = False
+    W: int = 30 
     frequency: int = 3
     timeout: int = 3
 
@@ -18,7 +17,7 @@ class ConvexAgent(Base):
     def __init__(self, env: VmEnv, config: ConvexConfig):
         super().__init__(type(self).__name__, env, config)
         self.queue = []  # introduce a queue to store operations
-        self.no_solution_iter = 0
+        self.failures = 0
     
     def eval(self):
         pass
@@ -50,7 +49,21 @@ class ConvexAgent(Base):
         if has_migration or to_skip:
             return vm_placement
         
-        new_placement = self.maximize_nuclear_norm(P, V, vm_cpu, vm_memory, vm_placement.copy())
+        result_container = {"result": None}
+
+        result_container["result"] = self.maximize_nuclear_norm(P, V, vm_cpu, vm_memory, vm_placement.copy())
+
+        def threaded_function():
+            result_container["result"] = self.maximize_nuclear_norm(P, V, vm_cpu, vm_memory, vm_placement.copy())
+
+        thread = threading.Thread(target=threaded_function)
+        thread.start()
+        thread.join(timeout=60)
+
+        if thread.is_alive():
+            raise Exception(f"Optimisation timeout: {self.env.config.seed} at {self.env.timestep}")
+   
+        new_placement = result_container["result"]
 
         # ExtractVM migrations and add them into the queue
         vm_was_placed = vm_placement < self.env.config.pms
@@ -96,7 +109,7 @@ class ConvexAgent(Base):
                 elif vm_placement[i] <= P: # ignore unarrived VMs
                     rows_formatted.append(row.reshape(1, -1))
 
-            if len(optimising) < 1:
+            if len(optimising) <= 1:
                 return vm_placement
 
             # X is a binary matrix of shape V * P, where V is the number of VMs and P is the number of servers
@@ -120,6 +133,7 @@ class ConvexAgent(Base):
             penalty = self.config.migration_penalty * summed_product
             objective = cvx.Minimize(cvx.sum(-X) + penalty) # Rank minimization is unsolvable if PMs are insufficient
             problem = cvx.Problem(objective, constraints)
+
             try: 
                 problem.solve(solver=cvx.SCIP, scip_params={"limits/time": self.config.timeout})
             except cvx.SolverError as e:

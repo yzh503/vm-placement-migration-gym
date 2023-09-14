@@ -11,19 +11,18 @@ import time
 from src.record import Record
 
 def evaluate_wrapper(args, records):
-    record = main.run(args)
-    records.append(record)
+    try: 
+        record = main.run(args)
+        records.append(record)
+    except Exception as e:
+        print(e)
 
 def evaluate(args, results):
 
     rewardfn, agent, jobname, weightspath, load = args
     configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
-    config['environment']['pms'] = exp.pms
-    config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.eval_steps
     config['environment']['reward_function'] = rewardfn
-    config['environment']['service_length'] = exp.service_length
     config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * load, 4)
 
     if '-masked' in jobname: 
@@ -35,7 +34,7 @@ def evaluate(args, results):
 
     args = []
     records = []
-    for seed in np.arange(0, exp.multiruns): 
+    for seed in np.arange(exp.multiruns): 
         recordname = 'data/exp_performance/load%.2f/%s-%d.json' % (load, jobname, seed)        
         if exists(recordname):
             print(f"{recordname} exists")
@@ -51,7 +50,7 @@ def evaluate(args, results):
             config['environment']['seed'] = int(seed)
             args.append(main.Args(
                     agent=agent, 
-                    reward='wr',
+                    reward=rewardfn,
                     config=config, 
                     silent=True,
                     logdir=None,
@@ -115,9 +114,9 @@ def evaluate(args, results):
     memory_mean_multitests = np.mean(memory, axis=2)
     memory_var = np.var(memory, axis=0)
     
-    results['agent'] += [jobname] * exp.eval_steps
-    results['load'] += [load] * exp.eval_steps
-    results['step'] += np.arange(1, exp.eval_steps + 1, 1, dtype=int).tolist()
+    results['agent'] += [jobname] * config['environment']['eval_steps']
+    results['load'] += [load] * config['environment']['eval_steps']
+    results['step'] += np.arange(1, config['environment']['eval_steps'] + 1, 1, dtype=int).tolist()
     results['cpu_mean'] += np.mean(cpu_mean_multitests, axis=0).tolist()
     results['cpu_var'] += cpu_var.tolist()
     results['memory_mean'] += np.mean(memory_mean_multitests, axis=0).tolist()
@@ -125,7 +124,7 @@ def evaluate(args, results):
     results['served'] += served_reqs.tolist()
     results['suspended'] += np.mean(suspended, axis=0).tolist()
     results['waiting_ratio'] += np.mean(waiting_ratios, axis=0).tolist()
-    results['slowdown_rates'] += [np.mean(slowdown_rates)] * exp.eval_steps
+    results['slowdown_rates'] += [np.mean(slowdown_rates)] * config['environment']['eval_steps']
 
     to_print = '%s,' % (jobname) 
     to_print += '%.2f,' % (load) 
@@ -151,13 +150,17 @@ if __name__ == '__main__':
     results = {'step': [], 'load': [], 'agent': [], 'cpu_mean': [], 'cpu_var': [], 'memory_mean': [], 'memory_var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Load, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    to_print += evaluate(('ut', 'bestfit', 'bestfit',None, exp.load), results)
-    to_print += evaluate(('ut', 'firstfit', 'firstfit',None, exp.load), results)
-    to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', exp.load), results)
-    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', exp.load), results)
-    to_print += evaluate(('ut', 'convex', 'convex', None, exp.load), results)
+    to_print += evaluate(('ut', 'convex', 'convex', None, 1), results)
+    to_print += evaluate(('ut', 'bestfit', 'bestfit',None, 1), results)
+    to_print += evaluate(('ut', 'firstfit', 'firstfit',None, 1), results)
+    to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', 1), results)
+    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', 1), results)
 
-
+    to_print += evaluate(('ut', 'convex', 'convex', None, 0.6), results)
+    to_print += evaluate(('ut', 'bestfit', 'bestfit',None, 0.6), results)
+    to_print += evaluate(('ut', 'firstfit', 'firstfit',None, 0.6), results)
+    to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', 0.6), results)
+    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', 0.6), results)
 
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')

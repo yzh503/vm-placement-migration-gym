@@ -7,21 +7,16 @@ import copy
 import exp
 
 def evaluate(params):
-    configfile = open('config/100.yml')
+    configfile = open('config/10.yml')
     config = yaml.safe_load(configfile)
-    config['environment']['pms'] = exp.pms
-    config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.eval_steps
     
     args = []
 
-    for W, migration_penalty, hard_solution in params: 
+    for W, migration_penalty in params: 
         config = copy.deepcopy(config)
         config['agents']['convex']['W']  = W
         config['agents']['convex']['migration_penalty'] = migration_penalty
-        config['agents']['convex']['hard_solution'] = hard_solution
-        config['environment']['service_length'] = exp.service_length
-        config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'] * exp.load, 3)
+        config['environment']['arrival_rate'] = np.round(config['environment']['pms']/0.55/config['environment']['service_length'], 3)
 
         recordname = f'data/exp_var/{W}-{migration_penalty}.json'
 
@@ -54,5 +49,5 @@ def evaluate(params):
             
 if __name__ == '__main__': 
     print("Evaluating Convex Optimisation Parameters...")
-    params = [(2, 1, False), (5, 1, False), (30, 1, False), (30, 5, False), (30, 10, False), (30, 20, False), (30, 30, False), (30, 30, True)]
+    params = [(2, 1), (10, 1), (30, 1), (30, 5), (30, 10), (30, 20), (30, 30), (30, 30)]
     evaluate(params)

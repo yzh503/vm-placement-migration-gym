@@ -13,9 +13,6 @@ def evaluate(args):
     agent, weightspath, load, sr = args
     configfile = open('config/100.yml')
     config = yaml.safe_load(configfile)
-    config['environment']['pms'] = exp.pms
-    config['environment']['vms'] = exp.vms
-    config['environment']['eval_steps'] = exp.eval_steps
     config['environment']['reward_function'] = "wr"
     config['environment']['service_length'] = sr
     config['environment']['sequence'] = "uniform"
@@ -74,22 +71,18 @@ if __name__ == '__main__':
     to_print = 'Agent, Load, Service Length, Total Served, Valid Suspend Actions, Valid Actions, Life, Average Pending, Average Slowdown, Max Slowdown\n'
     args = []
 
-    load = exp.load
+    load = 1.0
     for sr in np.arange(100, 4100, 200):
-        args.append(('caviglione', 'weights/caviglione-kl.pt', load, sr))
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-wr.pt', load, sr))
-        args.append(('convex', '', load, sr))
+        args.append(('ppo', 'weights/ppo-ut.pt', load, sr))
 
 
-    sr = exp.service_length
+    sr = 1000
     for load in np.arange(0.2, 1.1, 0.1):
-        args.append(('caviglione', 'weights/caviglione-kl.pt', load, sr))
         args.append(('firstfit', None, load, sr))
         args.append(('bestfit', None, load, sr))
-        args.append(('ppo', 'weights/ppo-kl.pt', load, sr))
-        args.append(('convex', '', load, sr))
+        args.append(('ppo', 'weights/ppo-ut.pt', load, sr))
 
     manager = multiprocessing.Manager()
     results = manager.list()
