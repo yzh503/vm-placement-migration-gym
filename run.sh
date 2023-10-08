@@ -21,6 +21,5 @@ python exp_performance_small.py
 python exp_performance.py 
 python exp_suspension.py 
 python exp_vm_size.py 
-python exp_var.py
 python exp_beta.py 
 python exp_convex.py

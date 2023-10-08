@@ -8,7 +8,6 @@ import threading
 
 @dataclass
 class ConvexConfig(Config): 
-    migration_penalty: float = 0
     W: int = 30 
     frequency: int = 3
     timeout: int = 3
@@ -128,10 +127,7 @@ class ConvexAgent(Base):
                 Am @ X <= 1,
                 Bm @ X <= 1
             ]
-            plm = M[vm_placement <= P][:, cols_to_optimize]
-            summed_product = cvx.sum(cvx.multiply(plm, (1 - X)))
-            penalty = self.config.migration_penalty * summed_product
-            objective = cvx.Minimize(cvx.sum(-X) + penalty) # Rank minimization is unsolvable if PMs are insufficient
+            objective = cvx.Minimize(cvx.sum(-X)) # Rank minimization is unsolvable if PMs are insufficient
             problem = cvx.Problem(objective, constraints)
 
             try: 

@@ -156,12 +156,6 @@ if __name__ == '__main__':
     to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', 1), results)
     to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', 1), results)
 
-    to_print += evaluate(('ut', 'convex', 'convex', None, 0.6), results)
-    to_print += evaluate(('ut', 'bestfit', 'bestfit',None, 0.6), results)
-    to_print += evaluate(('ut', 'firstfit', 'firstfit',None, 0.6), results)
-    to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', 0.6), results)
-    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', 0.6), results)
-
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')
 

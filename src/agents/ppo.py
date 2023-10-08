@@ -171,7 +171,7 @@ class PPOAgent(Base):
 
     def learn(self):
         ep_returns = np.zeros(self.config.episodes)
-        pbar = tqdm(range(int(self.config.episodes)), disable=not bool(self.config.training_progress_bar), desc='Training')
+        pbar = tqdm(total=int(self.env.config.training_steps) * self.config.episodes, disable=not bool(self.config.training_progress_bar), desc='Training')
 
         return_factor = int(self.config.episodes*0.01 if self.config.episodes >= 100 else 1)
         
@@ -187,12 +187,11 @@ class PPOAgent(Base):
         if self.config.reward_scaling:
             reward_scaler = RewardScaler(shape=1, gamma=self.config.gamma) # Reward scaling
 
-        for i_episode in pbar:
+        for i_episode in range(int(self.env.config.training_steps)):
             current_ep_reward = 0
             obs, _ = self.env.reset(seed=self.env.config.seed + i_episode)
             obs = torch.tensor(obs, device=self.config.device, dtype=self.float_dtype)
             done = False
-            pbar2 = tqdm(range(int(self.env.config.training_steps)), disable=not bool(self.config.training_progress_bar), desc='Training')
             while not done:
                 invalid_mask = torch.tensor(self.env.get_invalid_action_mask(self.config.masked), device=self.config.device)
                 action, logprob, _ = self.model.get_action(obs.unsqueeze(0), invalid_mask=invalid_mask) # pass in a batch of size 1
@@ -217,7 +216,7 @@ class PPOAgent(Base):
                 obs = next_obs
                 self.total_steps += 1
                 current_ep_reward += reward  # For logging
-                pbar2.update(1)
+                pbar.update(1)
 
             ep_returns[i_episode] = current_ep_reward
             if self.writer: 

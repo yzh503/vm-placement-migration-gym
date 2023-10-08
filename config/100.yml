@@ -25,7 +25,6 @@ agents:
       hidden_size: 512
       device: cpu
   convex:
-      migration_penalty: 0
       frequency: 10
       timeout: 10
       W: 300

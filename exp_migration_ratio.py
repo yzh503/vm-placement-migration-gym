@@ -18,7 +18,7 @@ def evaluate(args):
 
     args = []
 
-    recordname = 'data/exp_migration_ratio/%s-%.3f.json' % (agent, migration_ratio)
+    recordname = 'data/exp_migration_ratio/%s-%s-%.3f.json' % (agent, rewardfn, migration_ratio)
     
     if exists(recordname):
         print(f"{recordname} exists")
@@ -29,7 +29,7 @@ def evaluate(args):
     else: 
         print(f"{recordname} does not exist")
         record = main.run(main.Args(
-                    agent='ppo', 
+                    agent=agent, 
                     reward=config['environment']['reward_function'],
                     config=config, 
                     silent=True,
@@ -42,12 +42,10 @@ def evaluate(args):
         record.save(recordname)
 
     to_print = '%s,' % (agent) 
+    to_print += '%s,' % (rewardfn)
     to_print += '%.3f,' % (migration_ratio) 
-    to_print += '%d,' % (record.served_requests[-1]) 
     to_print += '%.3f,' % (np.mean(record.cpu))
-    to_print += '%.3f,' % (np.mean(record.pending_rates))
-    to_print += '%.3f,' % (np.mean(record.slowdown_rates))
-    to_print += '%.3f' % (np.max(record.slowdown_rates))
+    to_print += '%.3f' % (np.mean(record.slowdown_rates))
     del record
     return to_print + '\n'
 
@@ -57,23 +55,16 @@ def evaluate_wrapper(args, results):
     results.append(res)
 
 if __name__ == '__main__':
-    to_print = 'Agent, Migration Discount, Total Served, CPU, Average Pending, Average Slowdown, Max Slowdown\n'
+    to_print = 'Agent,Reward,Migration Ratio,CPU,Average Slowdown\n'
     args = []
 
-    for migration_ratio in np.arange(0.0, 1.1, 0.1):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
-        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
-    
-    for migration_ratio in np.arange(0.0, 0.1, 0.01):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
-        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
-
     for migration_ratio in np.arange(0.0, 0.01, 0.001):
-        args.append(('ppo-wr', 'weights/ppo-wr.pt', 'wr', migration_ratio))
-        args.append(('ppo-ut', 'weights/ppo-ut.pt', 'ut', migration_ratio))
-        args.append(('ppo-kl', 'weights/ppo-kl.pt', 'kl', migration_ratio))
+        args.append(('ppo', 'weights/ppo-wr.pt', 'wr', migration_ratio))
+        args.append(('ppo', 'weights/ppo-ut.pt', 'ut', migration_ratio))
+        args.append(('ppo', 'weights/ppo-kl.pt', 'kl', migration_ratio))
+        args.append(('bestfit', None, 'ut', migration_ratio))
+
+
 
 
     manager = multiprocessing.Manager()

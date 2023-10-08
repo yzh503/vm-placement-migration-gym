@@ -115,7 +115,8 @@ def evaluate_seeds(args):
     memory_var_multitests = np.var(memory, axis=2)
     memory_var = np.mean(memory_var_multitests, axis=0)
     
-    to_print = '%s,' % (rewardfn) 
+    to_print = '%s,' % (agent) 
+    to_print += '%s,' % (rewardfn) 
     to_print += '%.3f,' % (np.mean(returns))
     to_print += '%.3f,' % (np.mean(drop_rates))
     to_print += '%d,' % (np.mean(total_served))
@@ -134,7 +135,7 @@ if __name__ == '__main__':
 
     print("Evaluating Reward Functions...")
 
-    to_print = 'Reward, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
+    to_print = 'Agent, Reward, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "wr", 0.002))
     to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut", 0.002))
     to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "kl", 0.002))
