@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from src.agents.bestfit import BestFitAgent
-from src.agents.caviglione import CaviglioneAgent, CaviglioneConfig
+from src.agents.drlvmp import DRLVMPAgent, DRLVMPConfig
 from src.agents.ppo import PPOAgent, PPOConfig
 from src.agents.firstfit import FirstFitAgent
 from src.agents.convex import ConvexAgent, ConvexConfig
@@ -46,8 +46,8 @@ def run(args: Args) -> Record:
 
     env = gym.make("VmEnv-v1", config=Config(**env_config))
 
-    if args.agent == "caviglione":
-        agent = CaviglioneAgent(env, CaviglioneConfig(**agent_config))
+    if args.agent == "drlvmp":
+        agent = DRLVMPAgent(env, DRLVMPConfig(**agent_config))
     elif args.agent == "ppo":
         agent = PPOAgent(env, PPOConfig(**agent_config))
     elif args.agent == "convex":
@@ -89,7 +89,7 @@ def run(args: Args) -> Record:
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convex", "rainbow", "caviglione"], help = "Choose an agent to train or evaluate.")
+    parser.add_argument("-a", "--agent", required=True, choices=["ppo", "firstfit", "bestfit", "convex", "rainbow", "drlvmp"], help = "Choose an agent to train or evaluate.")
     parser.add_argument("-c", "--config", default='config/kl.yml', help = "Configuration for environment and agent")
     parser.add_argument("-r", "--reward", default='wr', choices=["wr", "ut", "kl"], help = "wr: waiting ratio, ut: utilization, kl: kl divergence")
     parser.add_argument("-d", "--debug", action='store_true', help="Print step-by-step debug info")

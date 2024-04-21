@@ -2,16 +2,16 @@
 python main.py -e -c config/10.yml -r wr -a ppo -w weights-10/ppo-wr.pt -l tensorboard -j ppo-wr &
 python main.py -e -c config/10.yml -r ut -a ppo -w weights-10/ppo-ut.pt -l tensorboard -j ppo-ut &
 python main.py -e -c config/10.yml -r kl -a ppo -w weights-10/ppo-kl.pt -l tensorboard -j ppo-kl &
-python main.py -e -c config/10.yml -r wr -a caviglione -w weights-10/caviglione-wr.pt -l tensorboard -j caviglione-wr & 
-python main.py -e -c config/10.yml -r ut -a caviglione -w weights-10/caviglione-ut.pt -l tensorboard -j caviglione-ut &
-python main.py -e -c config/10.yml -r kl -a caviglione -w weights-10/caviglione-kl.pt -l tensorboard -j caviglione-kl &
+python main.py -e -c config/10.yml -r wr -a drlvmp -w weights-10/drlvmp-wr.pt -l tensorboard -j drlvmp-wr & 
+python main.py -e -c config/10.yml -r ut -a drlvmp -w weights-10/drlvmp-ut.pt -l tensorboard -j drlvmp-ut &
+python main.py -e -c config/10.yml -r kl -a drlvmp -w weights-10/drlvmp-kl.pt -l tensorboard -j drlvmp-kl &
 
 python main.py -e -c config/100.yml -r wr -a ppo -w weights/ppo-wr.pt -l tensorboard -j ppo-wr &
 python main.py -e -c config/100.yml -r ut -a ppo -w weights/ppo-ut.pt -l tensorboard -j ppo-ut &
 python main.py -e -c config/100.yml -r kl -a ppo -w weights/ppo-kl.pt -l tensorboard -j ppo-kl &
-python main.py -e -c config/100.yml -r wr -a caviglione -w weights/caviglione-wr.pt -l tensorboard -j caviglione-wr & 
-python main.py -e -c config/100.yml -r ut -a caviglione -w weights/caviglione-ut.pt -l tensorboard -j caviglione-ut &
-python main.py -e -c config/100.yml -r kl -a caviglione -w weights/caviglione-kl.pt -l tensorboard -j caviglione-kl &
+python main.py -e -c config/100.yml -r wr -a drlvmp -w weights/drlvmp-wr.pt -l tensorboard -j drlvmp-wr & 
+python main.py -e -c config/100.yml -r ut -a drlvmp -w weights/drlvmp-ut.pt -l tensorboard -j drlvmp-ut &
+python main.py -e -c config/100.yml -r kl -a drlvmp -w weights/drlvmp-kl.pt -l tensorboard -j drlvmp-kl &
 
 wait
 

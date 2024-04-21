@@ -11,7 +11,7 @@ import time
 
 agent_names = {
     'ppo': 'PPOAgent',
-    'caviglione': 'CaviglioneAgent'
+    'drlvmp': 'DRLVMPAgent'
 }
 
 def evaluate_wrapper(args, records):
@@ -139,9 +139,9 @@ if __name__ == '__main__':
     to_print += evaluate_seeds(('ppo', 'weights/ppo-wr.pt', "wr", 0.002))
     to_print += evaluate_seeds(('ppo', 'weights/ppo-ut.pt', "ut", 0.002))
     to_print += evaluate_seeds(('ppo', 'weights/ppo-kl.pt', "kl", 0.002))
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-wr.pt', "wr", None))
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-ut.pt', "ut", None))
-    to_print += evaluate_seeds(('caviglione', 'weights/caviglione-kl.pt', "kl", None))
+    to_print += evaluate_seeds(('drlvmp', 'weights/drlvmp-wr.pt', "wr", None))
+    to_print += evaluate_seeds(('drlvmp', 'weights/drlvmp-ut.pt', "ut", None))
+    to_print += evaluate_seeds(('drlvmp', 'weights/drlvmp-kl.pt', "kl", None))
 
 
     file = open('data/exp_reward/summary.csv', 'w')

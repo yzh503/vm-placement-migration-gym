@@ -20,7 +20,7 @@ agents:
       batch_size: 100
       minibatch_size: 25
       migration_ratio: 0.002
-  caviglione: 
+  drlvmp: 
       episodes: 100
       hidden_size: 512
       device: cpu

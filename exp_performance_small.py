@@ -140,11 +140,10 @@ if __name__ == '__main__':
     results = {'step': [], 'load': [], 'agent': [], 'cpu_mean': [], 'cpu_var': [], 'memory_mean': [], 'memory_var': [], 'served': [], 'suspended': [], 'waiting_ratio': [], 'slowdown_rates': []}
     to_print = 'Agent, Load, Return, Drop Rate, Served VM, Suspend Actions, CPU Mean, CPU Variance, Memory Mean, Memory Variance, Pending Rate, Waiting Ratio, Slowdown Rate\n'
     
-    to_print += evaluate(('ut', 'convex', 'convex', None, 1), results)
     to_print += evaluate(('ut', 'bestfit', 'bestfit',None, 1), results)
     to_print += evaluate(('ut', 'firstfit', 'firstfit',None, 1), results)
     to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights-10/ppo-ut.pt', 1), results)
-    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights-10/caviglione-ut.pt', 1), results)
+    to_print += evaluate(('ut', 'drlvmp', 'drlvmp', 'weights-10/drlvmp-ut.pt', 1), results)
 
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance_small/data.csv')

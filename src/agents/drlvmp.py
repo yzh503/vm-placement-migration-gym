@@ -379,7 +379,7 @@ class Network(nn.Module):
         self.value_layer.reset_noise()
 
 @dataclass
-class CaviglioneConfig(Config):
+class DRLVMPConfig(Config):
     episodes: int = 2000
     hidden_size: int = 256
     lr: float = 3e-5
@@ -397,9 +397,9 @@ class CaviglioneConfig(Config):
     device: str = "cpu"
     show_training_progress: bool = True
 
-class CaviglioneAgent(Base):
+class DRLVMPAgent(Base):
 
-    def __init__(self, env: VmEnv, config: CaviglioneConfig):
+    def __init__(self, env: VmEnv, config: DRLVMPConfig):
         super().__init__(type(self).__name__, env, config)
         self.device = config.device
         obs_dim = self.env.observation_space.shape[0]

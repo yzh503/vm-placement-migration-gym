@@ -154,7 +154,7 @@ if __name__ == '__main__':
     to_print += evaluate(('ut', 'bestfit', 'bestfit',None, 1), results)
     to_print += evaluate(('ut', 'firstfit', 'firstfit',None, 1), results)
     to_print += evaluate(('ut', 'ppo', 'ppo-ut', 'weights/ppo-ut.pt', 1), results)
-    to_print += evaluate(('ut', 'caviglione', 'caviglione', 'weights/caviglione-ut.pt', 1), results)
+    to_print += evaluate(('ut', 'drlvmp', 'drlvmp', 'weights/drlvmp-ut.pt', 1), results)
 
     df = pd.DataFrame(results)
     df.to_csv('data/exp_performance/data.csv')
