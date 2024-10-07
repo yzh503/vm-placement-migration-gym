@@ -11,14 +11,16 @@ Experiment data are located in `data`. Plots are located in `plots`.
 ## Re-run Experiments
 
 ### Requirements
-To train models using CPU:
+To train a PPO agent under 100-PM enviroment using CPU (faster):
 ```shell
 conda env create --name vm --file=cpu.yml
+python main.py -e -c config/100.yml -r wr -a ppo -w weights/ppo1.pt
 ```
 
-To train models using GPU:
+To train using CUDA:
 ```shell
-conda env create --name vm --file=gpu.yml
+conda env create --name vmcuda --file=gpu.yml
+python main.py -e -c config/100.yml -r wr -a ppo -w weights/ppo1.pt
 ```
 
 ### Examples
@@ -29,18 +31,10 @@ To see help,
 python main.py -h
 ```
 
-By default, the config file is `config/r2.yml`.
-
-To test the random agent and save results in `results/random.json`:
+To test the PPO agent and save results in `results/ppo.json`:
 
 ```shell
-python main.py -a random -e -o results/random.json
-```
-
-To test the dqn agent and save results in `results/dqn.json`:
-
-```shell
-python main.py -a dqn -e -o results/dqn.json
+python main.py -a ppo -e -o results/ppo.json
 ```
 
 Inspect and update the experiment parallelisability in `exp_config.py` depending on your machine. If you have less than 8 cores, modify `cores`. If you have less than 40GB memory, reduce `multiruns`. 
@@ -52,22 +46,15 @@ chmod +x run.sh
 ./run.sh
 ```
 
-
-
 The experiment data are saved in `data`. When the experiments complete, draw plots in `plots.ipynb`.
 
 ## Agents
 
 - ppo
-- ppolstm
-- dqn
-- firstfit
+- drlvmp
+- convex
 - firstfit
 - bestfit
-- bestfit
-- random
-
-where "md" means multi-discrete action space.
 
 ## Experiment Results
 
