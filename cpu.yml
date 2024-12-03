@@ -10,7 +10,7 @@ dependencies:
   - numpy=1.25.1
   - pandas=2.0.3
   - python=3.10.0
-  - pytorch=2.4.1=py3.10_cpu_0
+  - pytorch=2.0.1=py3.10_cpu_0
   - pyyaml=6.0
   - seaborn=0.12.2
   - tensorboard=2.13.0

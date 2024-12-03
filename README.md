@@ -11,15 +11,11 @@ Experiment data are located in `data`. Plots are located in `plots`.
 ## Re-run Experiments
 
 ### Requirements
+
 To train a PPO agent under 100-PM enviroment using CPU (faster):
+
 ```shell
 conda env create --name vm --file=cpu.yml
-python main.py -e -c config/100.yml -r wr -a ppo -w weights/ppo1.pt
-```
-
-To train using CUDA:
-```shell
-conda env create --name vmcuda --file=gpu.yml
 python main.py -e -c config/100.yml -r wr -a ppo -w weights/ppo1.pt
 ```
 
@@ -86,3 +82,12 @@ environment:
     1. "uniform": VM size follows Unif(0.1,1)
     2. "lowuniform": VM size follows Unif(0.1,0.65)
     3. "highuniform": VM size follows Unif(0.25,1)
+
+## Alternative Training Device
+
+To train using CUDA (slower than CPU):
+
+```shell
+conda env create --name vmcuda --file=gpu.yml
+python main.py -e -c config/100.yml -r wr -a ppo -w weights/ppo1.pt
+```

@@ -17,8 +17,8 @@ dependencies:
   - tqdm=4.65.0
   - ujson=5.7.0
   - yaml=0.2.5
-  - pytorch=pytorch-2.4.1-py3.10_cuda12.4_cudnn9_0
-  - pytorch-cuda=pytorch-cuda-12.4-h3fd98bf_6
-  - pytorch-mutex=pytorch-mutex-1.0-cuda
-  - torchaudio=torchaudio-2.4.1-py310_cu124
-  - torchvision=torchvision-0.19.1-py310_cu124
+  - pytorch=2.0.1=py3.10_cuda11.8_cudnn8.7.0_0
+  - pytorch-cuda=11.8=h7e8668a_5
+  - pytorch-mutex=1.0=cuda
+  - torchaudio=2.0.2=py310_cu118
+  - torchvision=0.15.2=py310_cu118
